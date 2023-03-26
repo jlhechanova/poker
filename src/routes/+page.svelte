@@ -1,39 +1,60 @@
 <script lang="ts">
-  import type { Suit, Rank } from "$lib/consts";
-  import { suits, ranks } from "$lib/consts";
-  import Card from "./Card.svelte";
-  let button = 0;
+  import { onMount } from 'svelte';
+  import CardComponent from './Card.svelte';
+  import PlayerComponent from './Player.svelte';
+  import type Card from '$lib/consts/card';
+  import type Player from '$lib/consts/player';
+  import type PokerTable from '$lib/consts/pokertable';
+  import currency from 'currency.js';
 
-  const makeDeck = () => suits
-    .map(suit => ranks.map(rank => ({ rank: rank, suit: suit })))
-    .reduce((prev, curr) => prev.concat(curr));
-    
-  const draw = () => {
-    return deck.splice(Math.round(Math.random() * deck.length), 1)[0];
+  import { io } from 'socket.io-client'
+
+  let table: PokerTable;
+  let hand: Card[] = [];
+  let seat: number;
+
+  const socket = io();
+  socket.on('seat', data => seat = data);
+  socket.on('table', data => table = data);
+  socket.on('hand', data => hand = data);
+  
+  const handleSubmit = (e: SubmitEvent) => {
+    e.preventDefault();
+    socket.emit('check');
   }
-
-  let deck = makeDeck();
-
 </script>
 
 <main>
-  <div class="player"></div>
   <div class="tablecontainer">
     <div class="table"></div>
+    <div class="board">
+      {#if table}
+        {#each table.board as card}
+        <CardComponent { card } />
+        {/each}
+      {/if}
+    </div>
   </div>
-  <div class="player"></div>
-
-  {#each deck as card}
-  <Card { card } />
-  {/each}
+  <PlayerComponent player={table?.players[seat]}>
+    {#each hand as card}
+    <CardComponent { card } />
+    {/each}
+  </PlayerComponent>
+  <form on:submit={handleSubmit}>
+    <button>Fold</button>
+    <button>Check</button>
+    <button>Raise</button>
+  </form>
+  <button on:click={() => socket.emit('reset')}>Reset</button>
 </main>
 
 <style>
   main {
     position: relative;
   }
-
+  
   .tablecontainer {
+    min-width: max-content;
     perspective: 50rem;
   }
 
@@ -48,16 +69,18 @@
     outline: 1.5rem solid #111827;
     box-sizing: border-box;
     box-shadow: inset 0 2px 4px 0 rgb(0 0 0 / 0.4);
-    transform: rotate3d(1, 0, 0, 30deg);
-    z-index: -10;
+    transform: rotate3d(1, 0, 0, 20deg);
+    z-index: -100;
   }
 
-  .player {
-    position: relative;
-    margin: auto;
-    height: 5rem;
-    width: 5rem;
-    background-color: lavender;
-    border-radius: 50%;
+  .board {
+    position: absolute;
+    top: calc(50% - 3rem);
+    left: calc(50% - 13rem);
+    height: 7rem;
+    width: 26rem;
+    display: grid;
+    grid-template-columns: repeat(5, 5rem);
+    justify-content: space-between;
   }
 </style>

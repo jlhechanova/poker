@@ -3,8 +3,3 @@ export type Rank = typeof ranks[number];
 
 export const suits = ["S", "C", "H", "D"] as const;
 export type Suit = typeof suits[number];
-
-export type Card = {
-  rank: Rank,
-  suit: Suit
-}
