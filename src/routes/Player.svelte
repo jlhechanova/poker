@@ -10,9 +10,9 @@
   <div class="profile">
     <div class="avatar"></div>
     <div class="info">
-      <p>{player ? player.name.slice(0,5) : ''}</p>
+      <p>{player.name.slice(0,5)}</p>
       <hr style:width="{80}%">
-      <p>{player ? player.stack : ''}</p>
+      <p>{player.stack}</p>
     </div>
   </div>
 </div>

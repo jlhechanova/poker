@@ -1,14 +1,16 @@
 <script lang="ts">
   import type Card from "$lib/consts/card";
   import { fly } from 'svelte/transition';
-  export let card: Card;
+  export let card: Card | null = null;
 
 </script>
 
 
-<div class={ card.suit } in:fly={{y: -16}} out:fly={{y: 16}}>
+<div class={card ? card.suit : 'back'} in:fly={{y: -16}} out:fly={{y: 16}}>
+{#if card}
   <span>{ card.rank }</span>
   <p>{ card.rank }</p>
+{/if}
 </div>
 
 <style>
@@ -23,14 +25,20 @@
     filter: drop-shadow(0 10px 8px rgb(255 255 255 / 0.04)) drop-shadow(0 4px 3px rgb(255 255 255 / 0.1));
   }
 
+  .back {
+    border: 0.125rem solid white;
+    background: linear-gradient(20deg, #111827, #475569);
+  }
+
   span {
     font-size: 1.5rem;
+    line-height: 1.25;
   }
 
   p {
-    text-align: center;
     font-size: 4.5rem;
     line-height: 1;
+    text-align: center;
   }
 
   :is(.S) {

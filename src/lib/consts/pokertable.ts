@@ -1,107 +1,134 @@
-import currency from "currency.js"
-import { ranks, suits } from "./";
-import Player from "./player";
 import type Card from './card';
-
-const phases = ["init", "preflop", "flop", "turn", "river", "showdown"] as const;
+import Player from "./player";
+import { phases } from './';
+import { mod } from '../utils';
 
 export default class PokerTable {
+  players: ( Player | undefined )[];
   isOngoing: boolean;
-  players: Player[];
-  bigBlind: number;
+  bigBlind: Player | null;
+  blinds: number;
   board: Card[];
-  deck: Card[];
-  phase: number;
-  pot: currency;
+  phase: typeof phases[number];
+  phaseid: number;
+  toMatch: number;
+  minRaise: number;
 
-  constructor() {
+  constructor(blinds: number = 2, players: number = 4) {
+    this.players = Array.from({length: players});
     this.isOngoing = false;
-    this.players = Array.from({length: 10});
-    this.bigBlind = 0;
+    this.bigBlind = null;
+    this.blinds = blinds;
     this.board = [];
-    this.deck = [];
-    this.phase = 0;
-    this.pot = currency(0);
+    this.phase = 'init';
+    this.phaseid = 0;
+    this.toMatch = 0;
+    this.minRaise = 1;
   }
 
-  reset() {
+  clear() {
     this.board = [];
-    this.makeDeck();
-    this.phase = 0;
-    this.pot = currency(0);
-  }
-  
-  makeDeck() {
-    this.deck = suits
-      .map(suit => ranks.map(rank => ({ rank: rank, suit: suit })))
-      .reduce((prev, curr) => prev.concat(curr));
-  }
-
-  deal() {
-    const i = Math.floor(Math.random() * this.deck.length);
-    return this.deck.splice(i, 1)[0];
+    this.phase = 'init';
+    this.phaseid = 0;
+    this.toMatch = 0;
+    this.minRaise = 1;
   }
 
   nextPhase() {
-    this.phase = (this.phase + 1) % phases.length;
+    this.phaseid = (this.phaseid + 1) % phases.length;
+    this.phase = phases[this.phaseid];
+  }
+  
+  kickPlayers() {
+    if (this.bigBlind && !this.bigBlind.isinHand && !this.bigBlind.isinSeat) {
+      if (this.getinSeat().length) {
+        let i = mod(this.bigBlind.seat - 1, this.players.length);
+        let player = this.players[i];
+        while (!player || !player.isinSeat) {
+          i = mod(i - 1, this.players.length);
+          player = this.players[i];
+        }
+        this.bigBlind = this.players[i] as Player;
+      } else {
+        this.bigBlind = null;
+      }
+    }
+
+    this.players = this.players.map(player =>
+      !player || (!player.isinSeat && !player.isinHand) ? undefined : player);
   }
 
-  playerJoin(name: string) {
-    console.log(`Player ${name} has connected`);
-    this.players[this.playersSeated().length] = new Player(name, this.playersSeated().length);
+  playerLeave(name: string) {
+    const player = this.players.find(player => player?.sid === name) as Player;
+    if (player) {
+      player.isinSeat = false;
+      console.log(`${name} has left`);
+    }
+    this.kickPlayers();
   }
 
-  playerKick(name: string) {
-    const player = this.players.find(player => player?.sid === name);
-    this.players[player.seat] = undefined;
+  playerJoin(name: string, seat: number) {
+    let player = this.players.find(player => player && player.sid === name);
+    if (player) {
+      if (this.phaseid !== 0) return;
+
+      console.log(`Player ${name} switched from seat ${player.seat} to seat ${seat}`);
+      this.players[player.seat] = undefined;
+      player.seat = seat;
+    } else {
+      console.log(`Player ${name} has joined the table`);
+      player = new Player(name, seat);
+    }
+
+    this.players[seat] = player;
+    if (!this.bigBlind) {
+      this.bigBlind = player;
+    }
   }
 
-  playersSeated() {
-    return this.players.filter(player => player && player.seat >= 0);
+  getinSeat() {
+    return this.players.filter(player => 
+      player?.isinSeat) as Player[];
   }
 
-  playersinHand() {
-    return this.players.filter(player => player && player.isPlaying);
+  getinHand() {
+    return this.players.filter(player => 
+      player?.isinHand) as Player[];
+  }
+
+  getinPlay() {
+    return this.players.filter(player => 
+      player?.isinHand && player.stack > 0) as Player[];
+  }
+
+  resolveBets() {
+    const inPlay = this.players.filter(player => 
+      player?.isinHand && (!player.toAct || player.currBets)) as Player[];
+    
+    // assume that a fold or bet(amt) where amt >= 0 is an action,
+    // inPlay is an array of all players in the hand that have acted
+    // and inHand is an array of all players in the hand.
+    //
+    // |inPlay| = |inHand| iff all players have acted. if all players
+    // have acted, then they have either folded (|nHand| -= 1) or bet
+    // an amount >= 0, and therefore |inPlay| = |inHand|
+    if (inPlay.length !== this.getinHand().length) return false;
+
+    // a betting round is resolved if every non-allin bet = highest bet.
+    const resolved = inPlay.filter(player => player.stack > 0)
+      .every(player => player.currBets === this.toMatch);
+    
+    // in the case of the bb and calls from other players during the preflop,
+    // he will be counted in play due to the initial blinds. (currBets == true)
+    // if bet is resolved but bb is yet to act, not resolved.
+    if (this.phase === 'preflop' && resolved && this.bigBlind.toAct) return false;
+
+    return resolved;
   }
 }
 
 /*
-table loop?
-  prehand
-    make deck
-    get active players
-    reset pot
-    post blinds
-    
-  preflop
-    deal hole cards
-    betting phase
-    
-  flop
-    deal community cards
-    betting phase
 
-  turn
-    deal community card
-    betting phase
-
-  river
-    deal community card
-    betting phase
-
-  showdown
-    show hole cards of players
-
-  posthand
-    kick zero balance players
-    increment button
-
-
-BET PHASE
-fold/call/raise
-
-fold/check/raise
-
-keep bets array, check if all values are equal? (side pots???)
+(side pots???)
 
 */
