@@ -4,54 +4,51 @@
 </script>
 
 <div class="player">
+  <div class="avatar"></div>
+  <div class="info">
+    <p>{player.name.slice(0,5)}</p>
+    <hr style:width="{75}%">
+    <p>{player.stack}</p>
+  </div>
   <div class="cards">
     <slot />
-  </div>
-  <div class="profile">
-    <div class="avatar"></div>
-    <div class="info">
-      <p>{player.name.slice(0,5)}</p>
-      <hr style:width="{80}%">
-      <p>{player.stack}</p>
-    </div>
   </div>
 </div>
 
 <style>
   .player {
     position: relative;
-    margin: auto;
-    height: 4rem;
-    width: 12rem;
-    z-index: 10;
+    z-index: 50;
   }
 
   .player .cards {
     position: absolute;
-    left: calc(50% - 5rem);
-    bottom: 4.25rem;
-    z-index: -10;
+    width: max-content;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: 2rem;
+    z-index: 100;
   }
-
-  .player .profile {
-    height: 100%;
-    width: 100%;
-    display: flex;
-    background-color: lavender
-  }
-
+  
   .player .avatar {
-    height: 100%;
-    aspect-ratio: 1 / 1;
-    flex-shrink: 0;
-    border: 0.5rem solid black;
+    margin-bottom: -0.5rem;
+    height: 6rem;
+    width: 6rem;
+    border-radius: 50%;
+    border: 0.25rem solid black;
+    background: linear-gradient(20deg, #111827, #64748b);
   }
-
+  
   .player .info {
+    position: relative;
+    height: 3rem;
+    width: 6rem;
     display: flex;
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    flex-grow: 1;
+    border-radius: 0.5rem;
+    background-color: lavender;
+    z-index: 150;
   }
 </style>

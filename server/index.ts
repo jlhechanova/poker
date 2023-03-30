@@ -23,6 +23,7 @@ export const webSocketServer = {
         io.emit('hand', []);
         hands = [];
         table.clear();
+        table.kickPlayers();
         io.emit('table', table);
         deck.deck();
       } 
@@ -35,6 +36,8 @@ export const webSocketServer = {
         table.players.forEach(player => {
           if (player) {
             player.isinHand = false;
+            player.totalBets = 0;
+            player.currBets = 0;
           }
         });
         io.emit('table', table);
@@ -46,8 +49,6 @@ export const webSocketServer = {
             if (player?.isinSeat) {
               player.isinHand = true;
               player.toAct = true;
-              player.totalBets = 0;
-              player.currBets = 0;
               players.push(player);
             }
             return players;
@@ -56,8 +57,9 @@ export const webSocketServer = {
           let i = players.findIndex(player => player === table.bigBlind);
 
           table.toMatch = 1;
-          players[i % players.length].bet(1);
-          players[(i + 1) % players.length].bet(0.5);
+          table.bigBlind = players[mod(i + 1, players.length)];
+          players[mod(i + 1, players.length)].bet(1);
+          players[mod(i + 2, players.length)].bet(0.5);
 
           // deal hands
           table.players.forEach(player => {
@@ -76,10 +78,11 @@ export const webSocketServer = {
           }
           table.toMatch = 0;
         }
+        table.kickPlayers();
         io.emit('table', table);
 
-        // if one inPlay but many inHand, all in; skip betting
-        if (table.getinPlay().length === 1 && table.getinHand().length > 1) {
+        // if zero or one in play but many inHand, all in; skip betting
+        if (table.getinPlay().length <= 1 && table.getinHand().length > 1) {
           return;
         }
 
@@ -124,7 +127,7 @@ export const webSocketServer = {
             player.isinHand = false;
             hands[player.seat] = Array.from({length: 2});
 
-            // if player folds, update players array.
+            // if player folds, he is not in play anymore. update players
             // dont change index if in middle due to array shift
             players = table.getinPlay();
             if (i === 0 || i === players.length) {
@@ -143,7 +146,15 @@ export const webSocketServer = {
               table.toMatch = player.currBets;
             }
 
-            i = mod(i - 1, players.length);
+            // if player goes all in, he is not in play anymore. update players
+            if (!player.stack) {
+              players = table.getinPlay();
+              if (i === 0 || i === players.length) {
+                i = mod(i - 1, players.length);
+              }
+            } else {
+              i = mod(i - 1, players.length);
+            }
           }
 
           table.kickPlayers();
@@ -180,7 +191,7 @@ export const webSocketServer = {
       }
     }
 
-    io.on('connection', (socket) => {
+    io.on('connection', socket => {
       socket.emit('table', table);
       console.log(`${socket.id} has connected`);
 

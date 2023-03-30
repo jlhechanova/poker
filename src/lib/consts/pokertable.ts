@@ -40,7 +40,7 @@ export default class PokerTable {
   }
   
   kickPlayers() {
-    if (this.bigBlind && !this.bigBlind.isinHand && !this.bigBlind.isinSeat) {
+    if (this.bigBlind && !this.bigBlind.isinHand && (!this.bigBlind.isinSeat || !this.bigBlind.stack)) {
       if (this.getinSeat().length) {
         let i = mod(this.bigBlind.seat - 1, this.players.length);
         let player = this.players[i];
@@ -55,7 +55,7 @@ export default class PokerTable {
     }
 
     this.players = this.players.map(player =>
-      !player || (!player.isinSeat && !player.isinHand) ? undefined : player);
+      !player || ((!player.isinSeat || !player.stack) && !player.isinHand) ? undefined : player);
   }
 
   playerLeave(name: string) {

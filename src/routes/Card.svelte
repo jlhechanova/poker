@@ -2,15 +2,13 @@
   import type Card from "$lib/consts/card";
   import { fly } from 'svelte/transition';
   export let card: Card | null = null;
-
 </script>
 
-
-<div class={card ? card.suit : 'back'} in:fly={{y: -16}} out:fly={{y: 16}}>
-{#if card}
-  <span>{ card.rank }</span>
-  <p>{ card.rank }</p>
-{/if}
+<div class={card ? card.suit : 'back'} transition:fly|local={{y: -16}}>
+  {#if card}
+    <span>{ card.rank }</span>
+    <p>{ card.rank }</p>
+  {/if}
 </div>
 
 <style>

@@ -1,6 +1,7 @@
 <script lang="ts">
   import CardComponent from './Card.svelte';
   import PlayerComponent from './Player.svelte';
+  import DashboardComponent from './Dashboard.svelte';
   import type Card from '$lib/consts/card';
   import type PokerTable from '$lib/consts/pokertable';
   import { io } from 'socket.io-client'
@@ -9,7 +10,6 @@
   let hands: Card[][] = Array.from({length: 4}).map(_ => Array.from({length: 2}));
   let seat: number = -1;
 
-  $: console.log(table);
   $: players = table ? (seat !== -1 ? 
       table.players.slice(seat).concat(table.players.slice(0, seat))
       : table.players) 
@@ -48,89 +48,87 @@
     }, 5000);
   });
 
-  const handleSubmit = (e: SubmitEvent) => {
-    e.preventDefault();
-    action = (<HTMLButtonElement> e.submitter).value;    
+  const handleSubmit = (e: CustomEvent<{action: string}>) => {
+    action = e.detail.action; 
   }
 
   const handleJoin = (i: number) => {
     seat = i;
+    action = '';
     socket.emit('join', i);
   }
 
   const handleLeave = () => {
+    socket.emit('leave', seat);
     if (interval) {
       action = 'fold';
     }
-    socket.emit('leave', seat);
     seat = -1;
   }
 </script>
 
 <main>
-  <div class="tablecontainer">
-    <div class="table"></div>
-    <div class="pot">Pot: { pot }</div>
-    <div class="seats">
-    {#each players as player, i}
-      <div class="seat">
-      {#if player}
-        <PlayerComponent { player }>
-        {#if dealt}
-          {#each hands[seat !== -1 ? (i + seat) % players.length : i] as card}
+  <div class="container">
+    <div class="tablecontainer">
+      <div class="table"></div>
+      <div class="seats">
+        {#each players as player, i}
+          <div class="seat">
+            {#if player}
+              <PlayerComponent { player }>
+              {#if dealt && player.isinHand}
+                {#each hands[seat !== -1 ? (i + seat) % players.length : i] as card}
+                  <CardComponent { card } />
+                {/each}
+              {/if}
+                <!-- <CardComponent card={{rank: 'A', suit: 'C'}} />
+                <CardComponent card={{rank: 'A', suit: 'S'}} />   -->
+              </PlayerComponent>
+            {:else}
+              <button class="join" on:click={() => handleJoin(seat !== -1 ? (i + seat) % players.length : i)}>
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="3" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 5.5v13m6.5-6.5h-13"></path>
+                </svg>
+              </button>
+            {/if}
+          </div>
+        {/each}
+      </div>
+      <div class="board">
+        <div class="pot">Pot: { pot }</div>
+        {#if table}
+          {#each table.board as card}
             <CardComponent { card } />
           {/each}
         {/if}
-        </PlayerComponent>
-      {:else}
-        <button class="join" on:click={() => handleJoin(i)}>
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="3" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M12 5.5v13m6.5-6.5h-13"></path>
-          </svg>
-        </button>
-      {/if}
       </div>
-    {/each}
     </div>
-    <div class="board">
-    {#if table}
-      {#each table.board as card}
-        <CardComponent { card } />
-      {/each}
-    {/if}
-    </div>
-    {#if !action && timeout}
-    <form on:submit={handleSubmit} style:margin="auto">
-      <button type="submit" value="fold">Fold</button>
-      {#if table.players[seat].currBets === table.toMatch}
-      <button type="submit" value="check">Check</button>
-      {:else}
-      <button type="submit" value="call">Call</button>
-      {/if}
-      <!-- <button type="submit" value="raise">Raise</button> -->
-    </form>
-    {/if}
   </div>
-  {#if seat !== -1}
-  <button class="leave" on:click={handleLeave}>Leave</button>
-  {/if}
+  <DashboardComponent { timeout } { pot } { table } { seat } on:leave={handleLeave} on:submit={handleSubmit} />
 </main>
 
 <style>
   main {
-    margin-top: 10rem;
+    flex-grow: 1;
+    background-image: radial-gradient(#cbd5e1, #0f172a);
+  }
+  .container {
+    margin: auto;
+    padding: 8rem 0;
+    width: max-content;
   }
   
   .tablecontainer {
     position: relative;
-    margin: 2rem auto;
+    margin: auto;
+    padding: 1.5rem;
     width: max-content;
+    z-index: 10;
     perspective: 50rem;
   }
 
   .table {
     position: relative;
-    margin: -2rem auto 0;
     height: 25rem;
     width: 50rem;
     border-radius: 25rem;
@@ -138,25 +136,9 @@
     border: 2rem solid #16a34a;
     outline: 1.5rem solid #111827;
     box-sizing: border-box;
-    box-shadow: inset 0 2px 4px 0 rgb(0 0 0 / 0.4);
-    transform: rotate3d(1, 0, 0, 0deg);
+    box-shadow: inset 0 2px 4px 0 rgb(0 0 0 / 0.4), 0 4px 1.5rem 1.5rem rgb(255 255 255 / 0.4);
+    transform: rotate3d(1, 0, 0, 15deg);
     z-index: -100;
-  }
-  
-  .pot {
-    position: absolute;
-    margin: auto;
-    bottom: 256px;
-    left: 0;
-    right: 0;
-    color: white;
-    font-weight: 600;
-    text-align: center;
-  }
-
-  .seats {
-    height: 100%;
-    width: 100%;
   }
 
   .seats .seat {
@@ -164,23 +146,27 @@
   }
 
   .seats .seat:nth-child(1) {
-    bottom: 0;
-    left: calc(50% - 2rem);
+    bottom: -4rem;
+    left: 50%;
+    transform: translateX(-50%);
   }
 
   .seats .seat:nth-child(2) {
-    right: 0;
-    top: calc(50% - 2rem);
+    right: -1rem;
+    top: 50%;
+    transform: translateY(-50%);
   }
 
   .seats .seat:nth-child(3) {
-    top: 0;
-    left: calc(50% - 2rem);
+    top: -3.5rem;
+    left: 50%;
+    transform: translateX(-50%);
   }
   
   .seats .seat:nth-child(4) {
-    left: 0;
-    top: calc(50% - 2rem);
+    left: -1rem;
+    top: 50%;
+    transform: translateY(-50%);
   }
 
   .join {
@@ -189,16 +175,22 @@
     border-radius: 50%;
     cursor: pointer;
   }
-
-  .leave {
-    margin: auto;
-    display: block;
+  
+  .pot {
+    position: absolute;
+    top: -1.5rem;
+    left: 50%;
+    transform: translateX(-50%);
+    color: white;
+    font-weight: 600;
+    text-align: center;
   }
 
   .board {
     position: absolute;
-    top: calc(50% - 3rem);
-    left: calc(50% - 13rem);
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -3rem);
     height: 7rem;
     width: 26rem;
     display: grid;

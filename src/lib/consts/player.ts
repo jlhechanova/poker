@@ -11,7 +11,7 @@ export default class Player {
   isinHand: boolean;
   toAct: boolean;
 
-  constructor(sid: string, seat: number = -1, stack: number = 100) {
+  constructor(sid: string, seat: number = -1, stack: number = 200) {
     this.sid = sid;
     this.name = sid;
     this.seat = seat;
