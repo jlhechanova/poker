@@ -4,7 +4,6 @@
   import { fly } from 'svelte/transition';
   import currency from 'currency.js';
   export let timeout: NodeJS.Timeout | null = null;
-  export let pot = 0;
   export let table: PokerTable;
   export let seat = -1;
 
@@ -16,12 +15,12 @@
 
   $: player = table && seat >= 0 ? table.players[seat] : undefined;
 
-  $: min = player ? table.toMatch + table.minRaise - player.currBets : 1;
+  $: min = player ? table.toMatch + table.minRaise - player.bets : 1;
   $: max = player ? player.stack : 100;
   $: if (!raise) value = min;
 
   const handleSize = (e: MouseEvent) => {
-    value = currency(pot).multiply(e.target.value).value;
+    value = currency(table.pot).multiply(e.target.value).value;
   }
 
   const dispatch = createEventDispatcher();
@@ -57,12 +56,12 @@
   {#if timeout}
   <div class='actions'>
     <button value='fold'>Fold</button>
-    {#if player.currBets === table.toMatch}
+    {#if player.bets === table.toMatch}
     <button type='submit' value='check'>Check</button>
     {:else}
     <button value='call'>Call</button>
     {/if}
-    {#if player.stack > table.toMatch - player.currBets}
+    {#if player.stack > table.toMatch - player.bets}
     <button
       style:border-top-left-radius={raise ? '0' : '1rem'}
       style:border-top-right-radius={raise ? '0' : '1rem'}

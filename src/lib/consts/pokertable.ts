@@ -1,7 +1,7 @@
 import type Card from './card';
 import Player from "./player";
-import { phases } from './';
-import { mod } from '../utils';
+import { phases, type HandStrength } from './';
+import { mod, handComparator, evaluateHand } from '../utils';
 
 export default class PokerTable {
   players: ( Player | undefined )[];
@@ -11,6 +11,7 @@ export default class PokerTable {
   board: Card[];
   phase: typeof phases[number];
   phaseid: number;
+  pot: number;
   toMatch: number;
   minRaise: number;
 
@@ -22,6 +23,7 @@ export default class PokerTable {
     this.board = [];
     this.phase = 'init';
     this.phaseid = 0;
+    this.pot = 0;
     this.toMatch = 0;
     this.minRaise = 1;
   }
@@ -30,6 +32,7 @@ export default class PokerTable {
     this.board = [];
     this.phase = 'init';
     this.phaseid = 0;
+    this.pot = 0;
     this.toMatch = 0;
     this.minRaise = 1;
   }
@@ -38,33 +41,40 @@ export default class PokerTable {
     this.phaseid = (this.phaseid + 1) % phases.length;
     this.phase = phases[this.phaseid];
   }
-  
-  kickPlayers() {
-    if (this.bigBlind && !this.bigBlind.isinHand && (!this.bigBlind.isinSeat || !this.bigBlind.stack)) {
-      if (this.getinSeat().length) {
-        let i = mod(this.bigBlind.seat - 1, this.players.length);
-        let player = this.players[i];
-        while (!player || !player.isinSeat) {
-          i = mod(i - 1, this.players.length);
-          player = this.players[i];
-        }
-        this.bigBlind = this.players[i] as Player;
-      } else {
-        this.bigBlind = null;
-      }
-    }
 
-    this.players = this.players.map(player =>
-      !player || ((!player.isinSeat || !player.stack) && !player.isinHand) ? undefined : player);
+  nextBB() {
+    if (!this.getinSeat().length) {
+      this.bigBlind = null;
+    } else {
+      let i = mod(this.bigBlind.seat - 1, this.players.length);
+      while (!this.players[i] || !this.players[i].stack) {
+        i = mod(i - 1, this.players.length);
+      }
+      this.bigBlind = this.players[i] as Player;
+    }
   }
 
-  playerLeave(name: string) {
+  kick(player: Player) {
+    this.players[player.seat] = undefined;
+    if (player === this.bigBlind) this.nextBB();
+  }
+
+  playerLeave(id: string | number) {
+    let player = typeof id === 'number' ? this.players[id] :
+      this.players.find(player => player && player.sid === id);
+
+    if (player) {
+      player.isinSeat = false;
+      if (!player.isinHand) this.kick(player);
+    }
+  }
+  
+  playerDC(name: string) {
     const player = this.players.find(player => player?.sid === name) as Player;
     if (player) {
       player.isinSeat = false;
-      console.log(`${name} has left`);
+      if (!player.isinHand) this.kick(player);
     }
-    this.kickPlayers();
   }
 
   playerJoin(name: string, seat: number) {
@@ -88,7 +98,7 @@ export default class PokerTable {
 
   getinSeat() {
     return this.players.filter(player => 
-      player?.isinSeat) as Player[];
+      player?.isinSeat && player.stack > 0) as Player[];
   }
 
   getinHand() {
@@ -102,33 +112,68 @@ export default class PokerTable {
   }
 
   resolveBets() {
-    const inPlay = this.players.filter(player => 
-      player?.isinHand && (!player.toAct || player.currBets)) as Player[];
+    // players still in the hand that have made an action
+    const inRound = this.players.filter(player => 
+      player?.isinHand && (!player.toAct || player.bets)) as Player[];
     
-    // assume that a fold or bet(amt) where amt >= 0 is an action,
-    // inPlay is an array of all players in the hand that have acted
-    // and inHand is an array of all players in the hand.
-    //
-    // |inPlay| = |inHand| iff all players have acted. if all players
-    // have acted, then they have either folded (|nHand| -= 1) or bet
-    // an amount >= 0, and therefore |inPlay| = |inHand|
-    if (inPlay.length !== this.getinHand().length) return false;
+    const inHand = this.getinHand();
 
-    // a betting round is resolved if every non-allin bet = highest bet.
-    const resolved = inPlay.filter(player => player.stack > 0)
-      .every(player => player.currBets === this.toMatch);
-    
-    // in the case of the bb and calls from other players during the preflop,
-    // he will be counted in play due to the initial blinds. (currBets == true)
-    // if bet is resolved but bb is yet to act, not resolved.
+    // if only one player left in the hand, resolved
+    if (inHand.length === 1) return true;
+
+    // assume that a fold or bet(amt) where amt >= 0 is an action,
+    //
+    // |inRound| = |inHand| iff all players in the hand have acted. 
+    // if all players have acted, then they either folded (|inHand| -= 1) 
+    // or bet an amount >= 0 (|inRound| += 1), so |inRound| = |inHand|
+    if (inRound.length !== inHand.length) return false;
+
+    // betting is resolved if every non-allin bet = highest bet.
+    const resolved = inRound.filter(player => player.stack > 0)
+      .every(player => player.bets === this.toMatch);
+
+    // in the case of bb and calls from other players during preflop,
+    // bb will be counted to be in round due to initial blinds.
+    // if betting is resolved but bb is yet to act, not resolved.
     if (this.phase === 'preflop' && resolved && this.bigBlind.toAct) return false;
 
     return resolved;
   }
+
+  evaluate(hands: (Card[] | undefined)[]) {
+    const handStrengths = hands.reduce((acc, hand, i) => {
+      if (hand) {
+        acc.push([i, evaluateHand(this.board.concat(hand))]);
+      }
+      return acc;
+    }, [] as (number | HandStrength)[][])
+
+    handStrengths.sort((a, b) => {
+      let x = <HandStrength> a[1];
+      let y = <HandStrength> b[1];
+      return handComparator(x, y);
+    });
+    
+    let result: number[][] = [];
+    let start = 0;
+    let end = 0;
+    for (let i = 1, len = handStrengths.length; i < len; i++) {
+      if (handComparator(<HandStrength> handStrengths[i][1], <HandStrength> handStrengths[i-1][1])) {
+        end = i - 1;
+        let values: number[] = [];
+        for (let j = start; j < end + 1; j++) {
+          values.push(<number> handStrengths[j][0]);
+        }
+        result.push(values);
+        start = i;
+      }
+    }
+    let values: number[] = [];
+    for (let i = start, len = handStrengths.length; i < len; i++) {
+      values.push(<number> handStrengths[i][0]);
+    }
+    result.push(values);
+
+    return result;
+  }
 }
-
-/*
-
-(side pots???)
-
-*/

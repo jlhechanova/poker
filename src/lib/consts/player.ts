@@ -5,8 +5,8 @@ export default class Player {
   name: string;
   seat: number;
   isinSeat: boolean;
-  currBets: number;
-  totalBets: number;
+  bets: number;
+  totalbet: number;
   stack: number;
   isinHand: boolean;
   toAct: boolean;
@@ -16,8 +16,8 @@ export default class Player {
     this.name = sid;
     this.seat = seat;
     this.isinSeat = true;
-    this.currBets = 0;
-    this.totalBets = 0;
+    this.bets = 0;
+    this.totalbet = 0;
     this.stack = stack;
     this.isinHand = false;
     this.toAct = false;
@@ -29,6 +29,7 @@ export default class Player {
 
   bet(amount: number) {
     this.stack -= amount;
-    this.currBets += amount;
+    this.bets += amount;
+    this.totalbet += amount;
   }
 }

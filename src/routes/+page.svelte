@@ -10,12 +10,12 @@
   let hands: Card[][] = Array.from({length: 4}).map(_ => Array.from({length: 2}));
   let seat: number = -1;
 
+  $: console.log(table);
+
   $: players = table ? (seat !== -1 ? 
       table.players.slice(seat).concat(table.players.slice(0, seat))
       : table.players) 
     : [];
-  $: pot = table ? table.players.reduce((acc, p) => 
-      p ? acc + p.totalBets + p.currBets : acc, 0) : 0
   $: dealt = hands.some(hand => hand.some(card => card));
 
   const socket = io();
@@ -45,7 +45,7 @@
       clearInterval(interval);
       timeout = null;
       action = '';
-    }, 5000);
+    }, 10000);
   });
 
   const handleSubmit = (e: CustomEvent<{action: string}>) => {
@@ -59,10 +59,10 @@
   }
 
   const handleLeave = () => {
-    socket.emit('leave', seat);
     if (interval) {
       action = 'fold';
     }
+    socket.emit('leave', seat);
     seat = -1;
   }
 </script>
@@ -95,7 +95,7 @@
         {/each}
       </div>
       <div class="board">
-        <div class="pot">Pot: { pot }</div>
+        <div class="pot">Pot: { table ? table.pot : 0 }</div>
         {#if table}
           {#each table.board as card}
             <CardComponent { card } />
@@ -104,7 +104,7 @@
       </div>
     </div>
   </div>
-  <DashboardComponent { timeout } { pot } { table } { seat } on:leave={handleLeave} on:submit={handleSubmit} />
+  <DashboardComponent { timeout } { table } { seat } on:leave={handleLeave} on:submit={handleSubmit} />
 </main>
 
 <style>

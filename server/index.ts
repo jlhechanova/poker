@@ -9,7 +9,7 @@ import { mod } from '../src/lib/utils';
 
 const table = new PokerTable();
 const deck = new Deck();
-let hands: Card[][] = [];
+let hands: (Card[] | undefined)[] = [];
 
 export const webSocketServer = {
   name: 'webSocketServer',
@@ -17,164 +17,191 @@ export const webSocketServer = {
 
     const io = new Server(server.httpServer!);
 
-    // TODO - UPDATE BIG BLINDS EVERY HAND
     const runPhase = async () => {
-      if (table.phase === 'init') {
-        io.emit('hand', []);
-        hands = [];
-        table.clear();
-        table.kickPlayers();
-        io.emit('table', table);
-        deck.deck();
-      } 
-      else if (table.phase === 'showdown') {
-        // evaluate hands
-        io.emit('showdown', hands);
-      }
-      else if (table.phase === 'posthand') {
-        // reward pot/s, change bb
-        table.players.forEach(player => {
-          if (player) {
-            player.isinHand = false;
-            player.totalBets = 0;
-            player.currBets = 0;
-          }
-        });
-        io.emit('table', table);
-      }
-      else { // main streets
-        if (table.phase === 'preflop') {
-          // get seated players and set them to be in the hand
-          let players = table.players.reduce((players, player) => {
-            if (player?.isinSeat) {
-              player.isinHand = true;
-              player.toAct = true;
-              players.push(player);
-            }
-            return players;
-          }, [] as Player[]);
+      switch (table.phase) {
+        case 'init':
+          io.emit('hand', []);
+          hands = [];
+          table.clear();
+          io.emit('table', table);
+          deck.deck();
+          break;
 
-          let i = players.findIndex(player => player === table.bigBlind);
+        case 'showdown':
+          io.emit('showdown', hands);
+          break;
 
-          table.toMatch = 1;
-          table.bigBlind = players[mod(i + 1, players.length)];
-          players[mod(i + 1, players.length)].bet(1);
-          players[mod(i + 2, players.length)].bet(0.5);
-
-          // deal hands
+        case 'posthand':
           table.players.forEach(player => {
             if (player) {
-              let hand = Array.from({length: 2}, _ => deck.deal());
-              hands.push(hand);
-              io.to(player.sid).emit('hand', hand);
+              player.isinHand = false;
+              player.totalbet = 0;
+              player.bets = 0;
+
+              if (!player.stack || !player.isinSeat) {
+                player.isinSeat = false;
+                table.kick(player);
+                io.to(player.sid).emit('out');
+              }
             }
           });
-        } else {
-          if (table.phase === 'flop') {
-            table.board = Array.from({length: 3}, _ => deck.deal());
-          }
-          else { // turn/river
+          io.emit('table', table);
+          break;
+
+        default: // main streets
+          if (table.phase === 'preflop') {
+            // get seated, non-broke players and set them in the hand
+            let players = table.players.reduce((players, player) => {
+              if (player?.isinSeat && player.stack) {
+                player.isinHand = true;
+                player.toAct = true;
+                players.push(player);
+              }
+              return players;
+            }, [] as Player[]);
+  
+            let bbidx = players.findIndex(player => player === table.bigBlind);
+            table.bigBlind = players[mod(bbidx + 1, players.length)];
+            players[mod(bbidx + 1, players.length)].bet(1);
+            players[mod(bbidx + 2, players.length)].bet(0.5);
+            table.pot = 1.5;
+  
+            // deal hands
+            table.players.forEach(player => {
+              if (player) {
+                let hand = Array.from({length: 2}, () => deck.deal());
+                io.to(player.sid).emit('hand', hand);
+                hands.push(hand);
+              } else {
+                hands.push(undefined);
+              }
+            });
+          } else if (table.phase === 'flop') {
+            table.board = Array.from({length: 3}, () => deck.deal());
+          } else { // turn/river
             table.board.push(deck.deal());
           }
-          table.toMatch = 0;
-        }
-        table.kickPlayers();
-        io.emit('table', table);
-
-        // if zero or one in play but many inHand, all in; skip betting
-        if (table.getinPlay().length <= 1 && table.getinHand().length > 1) {
-          return;
-        }
-
-        // BETTING PHASE
-        table.minRaise = 1;
-
-        // find first to play, starting from left of big blind
-        // 1. find player in main players array
-        let utg = mod(table.bigBlind.seat - 1, table.players.length);
-        while (!table.players[utg] || table.players[utg].stack === 0) {
-          utg = mod(utg - 1, table.players.length);
-        }
-        
-        // 2. find index of player in inPlay array
-        let players = table.getinPlay();
-        let i = players.findIndex(player => player === table.players[utg]);
-        
-        // betting open until one player left or bets are resolved
-        while (players.length > 1 && !table.resolveBets()) {
-          let player = players[i];
-          player.toAct = false;
-          let action = 'check';
-
-          try {
-            const res = await io
-              .to(player.sid)
-              .timeout(10000)
-              .emitWithAck('action');
-            if (res.length) action = res[0];
-          } catch (err) { // client disconnect?
-            action = 'check';
+          io.emit('table', table); // CHANGE TO A BOARD EVENT ? 
+          
+          // if at most one in play but many in hand, all ins; skip betting
+          if (table.getinPlay().length <= 1 &&
+            table.getinHand().length > 1) {
+            return;
           }
-          console.log(action);          
+  
+          /*  BETTING PHASE
+           *
+           *  betting round is very straightforward:
+           *  1. find utg
+           *  2. starting from utg, player actions until betting round ends.
+           * 
+           *  the betting round ends in three ways:
+           *  1. only 1 player left in the hand
+           *    (no one else to contest, everyone else has folded)
+           *  2. at most 1 player left with a stack
+           *    (implies multiple people in the hand, which implies
+           *     everyone has gone all in since they do not have a stack
+           *     or only one player does)
+           *  3. all non-allin bets are equal to the highest bet
+           *    (players have a flag (toAct) for if the player has made
+           *     an action. highest bet = 0 implies all players bet 0 (check).
+           *     if highest bet > 0, implies that betting has been opened
+           *     and all players have matched any highest bet/gone allin.)
+           *  
+           *  checks are handled by the PokerTable.resolveBets() method.
+           */
 
-          // if playerbet is not equal to toMatch amount, change 
-          // action to fold. avoids making special case for BB
-          if (action === 'check' && player.currBets !== table.toMatch) {
-            action = 'fold';
-          }
-
-          if (action === 'fold') {
-            player.isinHand = false;
-            hands[player.seat] = Array.from({length: 2});
-
-            // if player folds, he is not in play anymore. update players
-            // dont change index if in middle due to array shift
-            players = table.getinPlay();
-            if (i === 0 || i === players.length) {
-              i = mod(i - 1, players.length);
+          if (table.phase !== 'preflop') table.toMatch = 0;
+          table.minRaise = 1;
+  
+          // utg is to the left of bb
+          let i = mod(table.bigBlind.seat - 1, table.players.length);
+          while (!table.resolveBets()) {  
+            // skip players not in hand or zero stack
+            while (!table.players[i] || 
+              !table.players[i].isinHand || 
+              !table.players[i].stack)
+            {
+              i = mod(i - 1, table.players.length);
             }
-          } else {
-            if (action === 'check') {
-              player.bet(0);
-            } else if (action === 'call') {
-              player.bet(Math.min(table.toMatch - player.currBets, player.stack));
-            } else {
-              let raise = Number(action);
+
+            let player = table.players[i] as Player;
+  
+            let action = 'check';
+            player.toAct = false;
+  
+            // get action from user
+            try {
+              const res = await io
+                .to(player.sid)
+                .timeout(10000)
+                .emitWithAck('action');
+  
+              if (res.length) action = res[0];
+            } catch (err) { // client disconnect?
+              action = 'check';
+            }
+  
+            // default action is check; avoids special case for BB
+            if (action === 'check' && player.bets !== table.toMatch) {
+              action = 'fold';
+            }
+  
+            switch (action) {
+              case 'check':
+                break;
+
+              case 'fold':
+                player.isinHand = false;
+                hands[player.seat] = undefined;
+                break;
               
-              player.bet(raise);
-              table.minRaise = player.currBets - table.toMatch;
-              table.toMatch = player.currBets;
+              case 'call':
+                let amount = Math.min(table.toMatch - player.bets, player.stack)
+                player.bet(amount);
+                table.pot += amount;
+                break;
+
+              default:
+                let bet = Number(action);
+  
+                if (isNaN(bet)) { // invalid input? fold
+                  player.isinHand = false;
+                  hands[player.seat] = undefined;
+                } else {
+                  bet = Math.max(bet,
+                    table.toMatch - player.bets + table.minRaise);
+                  let amount = Math.min(player.stack, bet);
+
+                  player.bet(amount);
+                  table.pot += amount;
+
+                  table.minRaise = player.bets - table.toMatch;
+                  table.toMatch = player.bets;
+                }
             }
-
-            // if player goes all in, he is not in play anymore. update players
-            if (!player.stack) {
-              players = table.getinPlay();
-              if (i === 0 || i === players.length) {
-                i = mod(i - 1, players.length);
-              }
-            } else {
-              i = mod(i - 1, players.length);
+            // TODO - rework after completing users
+            if (!player.isinSeat && !player.isinHand) {
+              table.kick(player);
             }
+            io.emit('table', table);
+
+            i = mod(i - 1, table.players.length);
           }
+  
+          // clear bets and set toAct = true for next phase
+          table.players.forEach(player => {
+            if (player) {
+              player.bets = 0;
+              player.toAct = true;
+            }
+          });
 
-          table.kickPlayers();
-          io.emit('table', table);
-        }
-
-        // lock bets, also set players'
-        // toAct = true for next phase
-        players.forEach(player => {
-          if (player) {
-            player.totalBets += player.currBets;
-            player.currBets = 0;
-            player.toAct = true;
+          // if one player left in hand after betting, skip to posthand
+          if (table.getinHand().length === 1) {
+            table.phaseid = 6;
+            table.phase = 'posthand';
           }
-        });
-
-        // if one player left in hand after betting, skip to posthand
-        if (table.getinHand().length === 1 && table.getinHand().length === 1) {
-          table.phaseid = 5;
-        }
       }
     }
 
@@ -185,7 +212,7 @@ export const webSocketServer = {
         setTimeout(() => {
           table.nextPhase();
           runHand();
-        }, table.phase === 'posthand' ? 2000 : 1000);
+        }, table.phase === 'showdown' ? 2000 : 1000);
       } else {
         table.isOngoing = false;
       }
@@ -205,13 +232,13 @@ export const webSocketServer = {
         }
       });
 
-      socket.on('leave', _ => {
-        table.playerLeave(socket.id);
+      socket.on('leave', seat => {
+        table.playerLeave(seat);
         io.emit('table', table);
       });
       
       socket.on('disconnect', () => {
-        table.playerLeave(socket.id);
+        table.playerDC(socket.id);
         console.log(`${socket.id} has disconnected`);
         io.emit('table', table);
       });
