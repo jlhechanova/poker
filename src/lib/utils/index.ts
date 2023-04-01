@@ -56,6 +56,14 @@ export const evaluateHand = (cards: Card[]): HandStrength => {
           return;
         }
 
+        // handle 5,4,3,2,A
+        if (sum === 28) {
+          flush.shift();
+          flush.push(1);
+          sf = true;
+          return;
+        }
+
         card = five.shift()!;
         sum -= rankVal[card.rank];
       }
@@ -131,6 +139,10 @@ export const evaluateHand = (cards: Card[]): HandStrength => {
 
   // STRAIGHT
   let uniqueRanks = Array.from(new Set(cards.reduce(cardstoVal, [] as number[])));
+  if (uniqueRanks[0] === rankVal['A']) { // handles 5,4,3,2,A
+    uniqueRanks.push(1);
+  }
+
   if (uniqueRanks.length >= 5) {
     let i = 4;
     while (i < uniqueRanks.length) {
