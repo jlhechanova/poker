@@ -6,6 +6,7 @@ import type Card from '../src/lib/consts/card';
 import PokerTable from '../src/lib/consts/pokertable';
 import Deck from '../src/lib/consts/deck';
 import { mod } from '../src/lib/utils';
+import currency from 'currency.js';
 
 const table = new PokerTable();
 const deck = new Deck();
@@ -28,15 +29,61 @@ export const webSocketServer = {
           break;
 
         case 'showdown':
-          io.emit('showdown', hands);
+          let result = table.evaluate(hands); // list of list of seats acc to hand strength
+          let eligible = table.getinHand().length;
+
+          if (eligible > 1) {
+            io.emit('showdown', hands);
+          }
+
+          let k = 0;
+          while (table.pot.value) {
+            while (result[k].length) {
+              // distribute pot to players in this hand strength
+              let dist = table.pot.distribute(result[k].length);
+
+              if (dist.every((cur, i) => 
+                table.players[result[k][i]].totalbet * eligible >= cur.value))
+              {
+                dist.forEach((cur, i) => table.players[result[k][i]].topup(cur.value))
+                table.pot = currency(0);
+                break;
+              }
+
+              // SIDE POTS
+              // get player with lowest money in the pot
+              let min = result[k].reduce((prev, cur) =>
+                table.players[cur].totalbet < table.players[prev].totalbet ? cur : prev);
+              let minPlayer = table.players[min];
+              let minBet = currency(minPlayer.totalbet);
+
+              // award max possible amount to players.
+              // reduce bet of players in the pot by
+              // the lowest player bet
+              result[k].forEach(seat => {
+                let player = table.players[seat]
+                player.topup(minBet.multiply(eligible).value);
+                player.totalbet = -minBet.subtract(player.totalbet).value;
+              });
+              table.pot = table.pot.subtract(minBet.value * eligible * result[k].length);
+
+              // remove min player(s) from the pot
+              result[k] = result[k].filter(seat => {
+                if (table.players[seat].totalbet) {
+                  return true;
+                }
+                eligible--;
+              })
+            }
+            k++;
+          }
+
           break;
 
         case 'posthand':
           table.players.forEach(player => {
             if (player) {
               player.isinHand = false;
-              player.totalbet = 0;
-              player.bets = 0;
 
               if (!player.stack || !player.isinSeat) {
                 player.isinSeat = false;
@@ -55,6 +102,8 @@ export const webSocketServer = {
               if (player?.isinSeat && player.stack) {
                 player.isinHand = true;
                 player.toAct = true;
+                player.totalbet = 0;
+                player.bets = 0;
                 players.push(player);
               }
               return players;
@@ -64,7 +113,7 @@ export const webSocketServer = {
             table.bigBlind = players[mod(bbidx + 1, players.length)];
             players[mod(bbidx + 1, players.length)].bet(1);
             players[mod(bbidx + 2, players.length)].bet(0.5);
-            table.pot = 1.5;
+            table.pot = table.pot.add(1.5);
   
             // deal hands
             table.players.forEach(player => {
@@ -81,6 +130,8 @@ export const webSocketServer = {
           } else { // turn/river
             table.board.push(deck.deal());
           }
+          table.toMatch = table.phase === 'preflop' ? 1 : 0;
+          table.minRaise = 1;
           io.emit('table', table); // CHANGE TO A BOARD EVENT ? 
           
           // if at most one in play but many in hand, all ins; skip betting
@@ -111,9 +162,6 @@ export const webSocketServer = {
            *  checks are handled by the PokerTable.resolveBets() method.
            */
 
-          if (table.phase !== 'preflop') table.toMatch = 0;
-          table.minRaise = 1;
-  
           // utg is to the left of bb
           let i = mod(table.bigBlind.seat - 1, table.players.length);
           while (!table.resolveBets()) {  
@@ -159,7 +207,7 @@ export const webSocketServer = {
               case 'call':
                 let amount = Math.min(table.toMatch - player.bets, player.stack)
                 player.bet(amount);
-                table.pot += amount;
+                table.pot = table.pot.add(amount);
                 break;
 
               default:
@@ -174,7 +222,7 @@ export const webSocketServer = {
                   let amount = Math.min(player.stack, bet);
 
                   player.bet(amount);
-                  table.pot += amount;
+                  table.pot = table.pot.add(amount);
 
                   table.minRaise = player.bets - table.toMatch;
                   table.toMatch = player.bets;
@@ -199,8 +247,8 @@ export const webSocketServer = {
 
           // if one player left in hand after betting, skip to posthand
           if (table.getinHand().length === 1) {
-            table.phaseid = 6;
-            table.phase = 'posthand';
+            table.phaseid = 5;
+            table.phase = 'showdown';
           }
       }
     }

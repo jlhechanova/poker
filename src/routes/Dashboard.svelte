@@ -20,7 +20,7 @@
   $: if (!raise) value = min;
 
   const handleSize = (e: MouseEvent) => {
-    value = currency(table.pot).multiply(e.target.value).value;
+    value = table.pot.multiply(e.target.value).value;
   }
 
   const dispatch = createEventDispatcher();

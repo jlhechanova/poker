@@ -34,7 +34,7 @@ export const evaluateHand = (cards: Card[]): HandStrength => {
     let diff = 0;
     let five: Card[] = [];
     while (i < 7) {
-      let card = cards[i];
+      let card = cards[i++];
       if (card.suit !== suit) {
         diff++;
         if (diff > 2) return;

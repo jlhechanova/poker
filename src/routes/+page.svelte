@@ -4,7 +4,7 @@
   import DashboardComponent from './Dashboard.svelte';
   import type Card from '$lib/consts/card';
   import type PokerTable from '$lib/consts/pokertable';
-  import { io } from 'socket.io-client'
+  import { io } from 'socket.io-client';
 
   let table: PokerTable;
   let hands: Card[][] = Array.from({length: 4}).map(_ => Array.from({length: 2}));
@@ -47,6 +47,10 @@
       action = '';
     }, 10000);
   });
+
+  socket.on('out', () => {
+    seat = -1;
+  })
 
   const handleSubmit = (e: CustomEvent<{action: string}>) => {
     action = e.detail.action; 

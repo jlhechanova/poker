@@ -1,5 +1,3 @@
-import currency from 'currency.js';
-
 export default class Player {
   sid: string;
   name: string;

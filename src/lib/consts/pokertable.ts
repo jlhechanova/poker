@@ -2,6 +2,7 @@ import type Card from './card';
 import Player from "./player";
 import { phases, type HandStrength } from './';
 import { mod, handComparator, evaluateHand } from '../utils';
+import currency from 'currency.js';
 
 export default class PokerTable {
   players: ( Player | undefined )[];
@@ -11,7 +12,7 @@ export default class PokerTable {
   board: Card[];
   phase: typeof phases[number];
   phaseid: number;
-  pot: number;
+  pot: currency;
   toMatch: number;
   minRaise: number;
 
@@ -23,7 +24,7 @@ export default class PokerTable {
     this.board = [];
     this.phase = 'init';
     this.phaseid = 0;
-    this.pot = 0;
+    this.pot = currency(0);
     this.toMatch = 0;
     this.minRaise = 1;
   }
@@ -32,7 +33,7 @@ export default class PokerTable {
     this.board = [];
     this.phase = 'init';
     this.phaseid = 0;
-    this.pot = 0;
+    this.pot = currency(0);
     this.toMatch = 0;
     this.minRaise = 1;
   }
