@@ -55,17 +55,17 @@ export const evaluateHand = (cards: Card[]): HandStrength => {
           sf = true;
           return;
         }
+        
+        card = five.shift()!;
+        sum -= rankVal[card.rank];
 
-        // handle 5,4,3,2,A
-        if (sum === 28) {
+        // sum(5,4,3,2) -> 14
+        if (sum === 14) {
           flush.shift();
           flush.push(1);
           sf = true;
           return;
         }
-
-        card = five.shift()!;
-        sum -= rankVal[card.rank];
       }
     }
   });
