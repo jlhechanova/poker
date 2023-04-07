@@ -1,204 +1,281 @@
-<script lang="ts">
-  import CardComponent from './Card.svelte';
-  import PlayerComponent from './Player.svelte';
-  import DashboardComponent from './Dashboard.svelte';
-  import type Card from '$lib/consts/card';
-  import type PokerTable from '$lib/consts/pokertable';
-  import { io } from 'socket.io-client';
+<script lang='ts'>
+  import { slide } from 'svelte/transition';
+  import { socket, lobby } from '$lib/stores';
+  import { goto } from '$app/navigation';
+  import Modal from './Modal.svelte';
 
-  let table: PokerTable;
-  let hands: Card[][] = Array.from({length: 4}).map(_ => Array.from({length: 2}));
-  let seat: number = -1;
+  const levels = [1, 2, 5, 10, 25, 50, 100, 200];
+  let showModal = false;
+  let query = '';
 
-  $: console.log(table);
-
-  $: players = table ? (seat !== -1 ? 
-      table.players.slice(seat).concat(table.players.slice(0, seat))
-      : table.players) 
-    : [];
-  $: dealt = hands.some(hand => hand.some(card => card));
-
-  const socket = io();
-  socket.on('table', data => table = data);
-  socket.on('hand', data => {
-    hands = hands.map(_ => Array.from({length: 2}));
-    if (data.length) hands[seat] = data;
-  });
-
-  let timeout: NodeJS.Timer | null;
-  let interval: NodeJS.Timer;
-  let action = '';
-  
-  socket.on('action', fn => {
-    interval = setInterval(() => {
-      if (action && timeout) {
-        clearTimeout(timeout);
-        clearInterval(interval);
-        fn(action);
-
-        timeout = null;
-        action = '';
-      }
-    });
-
-    timeout = setTimeout(() => {
-      clearInterval(interval);
-      timeout = null;
-      action = '';
-    }, 10000);
-  });
-
-  socket.on('out', () => {
-    seat = -1;
-  })
-
-  const handleSubmit = (e: CustomEvent<{action: string}>) => {
-    action = e.detail.action; 
+  let option = '';
+  const handleOption = (e: SubmitEvent) => {
+    let value = (<HTMLInputElement> e.submitter).value;
+    option = value == option ? '' : value;
   }
 
-  const handleJoin = (i: number) => {
-    seat = i;
-    action = '';
-    socket.emit('join', i);
+  let roomID: string | undefined
+  const handleTable = (e: MouseEvent) => {
+    roomID = (e.target as HTMLElement).closest('tr')!.dataset.id;
   }
 
-  const handleLeave = () => {
-    if (interval) {
-      action = 'fold';
+  const handleJoin = async () => {
+    if (!roomID) return;
+
+    const result = await $socket.emitWithAck('joinRoom', roomID, '');
+    if (result) {
+      lobby.set(roomID);
+      goto('/poker');
     }
-    socket.emit('leave', seat);
-    seat = -1;
+    else showModal = true;
+  }
+
+  const handleCreate = async (e: SubmitEvent) => {
+    const data = new FormData(e.target as HTMLFormElement);
+    const roomID = await $socket.emitWithAck('createRoom', Object.fromEntries(data.entries()));
+    if (roomID) {
+      lobby.set(roomID);
+      goto('/poker');
+    }
   }
 </script>
 
-<main>
-  <div class="container">
-    <div class="tablecontainer">
-      <div class="table"></div>
-      <div class="seats">
-        {#each players as player, i}
-          <div class="seat">
-            {#if player}
-              <PlayerComponent { player }>
-              {#if dealt && player.isinHand}
-                {#each hands[seat !== -1 ? (i + seat) % players.length : i] as card}
-                  <CardComponent { card } />
-                {/each}
-              {/if}
-                <!-- <CardComponent card={{rank: 'A', suit: 'C'}} />
-                <CardComponent card={{rank: 'A', suit: 'S'}} />   -->
-              </PlayerComponent>
-            {:else}
-              <button class="join" on:click={() => handleJoin(seat !== -1 ? (i + seat) % players.length : i)}>
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="3" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 5.5v13m6.5-6.5h-13"></path>
-                </svg>
-              </button>
-            {/if}
+<div class="container">
+  <div class='content'>
+    <div class="inner">
+      <div class='heading'>
+        <h1>POKERNOVA</h1>
+        <h2>Play NLHE Poker Online</h2>
+      </div>
+      <form class='options' on:submit|preventDefault={handleOption}>
+        <!-- <button value='play'>PLAY</button> -->
+        <button value='join'>JOIN</button>
+        <button value='create'>CREATE</button>
+      </form>
+
+      {#if option === 'join'}
+        {#await $socket.emitWithAck('getRooms') then rooms}
+          <div class='join' transition:slide>
+            <p class='heading'>JOIN</p>
+            <hr>
+            <div class='rooms'>
+              <div class='field'>
+                <input bind:value={query} name='search' placeholder='Search' autocomplete='off'>
+                <button on:click={() => option = 'join'}>
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+                  </svg>
+                </button>
+              </div>
+              <table cellspacing='0'>
+                <thead>
+                  <tr>
+                    <th style:text-align='left'>Lobby</th>
+                    <th>Host</th>
+                    <th style:width='4rem'>Blinds</th>
+                    <th style:width='4rem'>Players</th>
+                  </tr>
+                </thead>
+                <tbody on:click={handleTable} on:dblclick={handleJoin}>
+                  {#each rooms.filter(room => room.name.includes(query)) as room (room.id)}
+                    <tr data-id={room.id} tabindex="0">
+                      <td>{room.name}{#if room.passcode}🔒{/if}</td>
+                      <td>{room.host.name}</td>
+                      <td>{room.table.blinds}/{room.table.blinds * 2}</td>
+                      <td>{room.table.curPlayers}/{room.table.maxPlayers}</td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+            <button class='confirm-btn' on:click={handleJoin}>JOIN</button>
           </div>
-        {/each}
-      </div>
-      <div class="board">
-        <div class="pot">Pot: { table ? table.pot : 0 }</div>
-        {#if table}
-          {#each table.board as card}
-            <CardComponent { card } />
-          {/each}
-        {/if}
-      </div>
+        {/await}
+
+      {:else if option === 'create'}
+        <form class='create' on:submit|preventDefault={handleCreate} transition:slide>
+          <p class='heading'>CREATE</p>
+          <hr>
+          <div class='settings'>
+            <label for='name'>
+              <p>Lobby <span class='required'>REQUIRED</span></p>
+              <input type='text' id='name' name='name' placeholder='Name' autocomplete="off">
+            </label>
+
+            <label for='passcode'>
+              <p>Passcode</p>
+              <input type='text' id='passcode' name='passcode' placeholder="It's a secret!" autocomplete="off">
+            </label>
+
+            <div>
+              <p>Players</p>
+              <input type='radio' id='max4' name='players' value='4' checked>
+              <label for='max4'>4</label>
+              <input type='radio' id='max9' name='players' value='9'>
+              <label for='max9'>9</label>
+              <input type='radio' id='max6' name='players' value='6'>
+              <label for='max6'>6</label>
+              <input type='radio' id='max2' name='players' value='2'>
+              <label for='max2'>2</label>
+            </div>
+  
+            <label for='blinds'>
+              <p>Blinds</p>
+              <select id='blinds' name='blinds'>
+                {#each levels as level}
+                  <option value={level}>{level}/{2*level}</option>
+                {/each}
+              </select>
+            </label>
+          </div>
+          <button class='confirm-btn'>OK</button>
+        </form>
+      {/if}
     </div>
   </div>
-  <DashboardComponent { timeout } { table } { seat } on:leave={handleLeave} on:submit={handleSubmit} />
-</main>
+</div>
+
+<Modal bind:showModal>
+  <h2 slot='header'>
+    Private Lobby
+  </h2>
+  <div class='modal'>
+    <form on:submit|preventDefault={async e => {
+      const data = new FormData(e.target);
+      const result = await $socket.emitWithAck('joinRoom', roomID, data.get('pass'));
+      if (result) {
+        lobby.set(roomID);
+        goto('/poker');
+      }
+    }}>
+      <input id='pass' name='pass' autocomplete="off">
+      <button class='confirm-btn'>JOIN</button>
+    </form>
+  </div>
+</Modal>
 
 <style>
-  main {
-    flex-grow: 1;
-    background-image: radial-gradient(#cbd5e1, #0f172a);
-  }
   .container {
+    height: 100%;
+    padding-top: 8rem;
+  }
+
+  .content {
     margin: auto;
-    padding: 8rem 0;
-    width: max-content;
-  }
-  
-  .tablecontainer {
-    position: relative;
-    margin: auto;
-    padding: 1.5rem;
-    width: max-content;
-    z-index: 10;
-    perspective: 50rem;
+    padding: 1rem;
+    width: 100%;
+    max-width: 28rem;
   }
 
-  .table {
-    position: relative;
-    height: 25rem;
-    width: 50rem;
-    border-radius: 25rem;
-    background-color: #166534;
-    border: 2rem solid #16a34a;
-    outline: 1.5rem solid #111827;
-    box-sizing: border-box;
-    box-shadow: inset 0 2px 4px 0 rgb(0 0 0 / 0.4), 0 4px 1.5rem 1.5rem rgb(255 255 255 / 0.4);
-    transform: rotate3d(1, 0, 0, 15deg);
-    z-index: -100;
+  .inner {
+    padding: 1rem;
+    width: 100%;
+    background-color: #fafaf9;
+    border-radius: 1rem;
+    filter: drop-shadow(0 4px 3px rgb(0 0 0 / 0.07)) drop-shadow(0 2px 2px rgb(0 0 0 / 0.06));
   }
 
-  .seats .seat {
-    position: absolute;
-  }
-
-  .seats .seat:nth-child(1) {
-    bottom: -4rem;
-    left: 50%;
-    transform: translateX(-50%);
-  }
-
-  .seats .seat:nth-child(2) {
-    right: -1rem;
-    top: 50%;
-    transform: translateY(-50%);
-  }
-
-  .seats .seat:nth-child(3) {
-    top: -3.5rem;
-    left: 50%;
-    transform: translateX(-50%);
-  }
-  
-  .seats .seat:nth-child(4) {
-    left: -1rem;
-    top: 50%;
-    transform: translateY(-50%);
-  }
-
-  .join {
-    height: 4rem;
-    width: 4rem;
-    border-radius: 50%;
-    cursor: pointer;
-  }
-  
-  .pot {
-    position: absolute;
-    top: -1.5rem;
-    left: 50%;
-    transform: translateX(-50%);
-    color: white;
-    font-weight: 600;
+  .heading {
     text-align: center;
   }
 
-  .board {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -3rem);
-    height: 7rem;
-    width: 26rem;
+  .options {
+    padding: 1rem;
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+  }
+
+  .options button {
+    height: 3rem;
+    width: 7rem;
+    font-size: 1.25rem;
+    font-weight: 600;
+  }
+
+  .join,
+  .create {
+    padding: 0 1rem 1rem;
+  }
+
+  .join .rooms {
+    padding: 1rem;
+  }
+
+  .rooms .field {
+    display: flex;
+  }
+
+  .field input {
+    padding: 0.5rem;
+    height: 2rem;
+    flex-grow: 1;
+  }
+
+  .field button {
+    height: 2rem;
+    aspect-ratio: 1/1;
+    vertical-align: middle;
+  }
+
+  table {
+    table-layout: fixed;
+    width: 100%;
+  }
+
+  tr:focus {
+    background-color: #cbd5e1;
+  }
+
+  td {
+    overflow: hidden;
+  }
+
+  td ~ td {
+    text-align: center;
+  }
+
+  .create .settings{
+    padding: 1rem;
     display: grid;
-    grid-template-columns: repeat(5, 5rem);
-    justify-content: space-between;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
+
+  .create .settings input[type='text'] {
+    height: 2rem;
+    width: 100%;
+    padding: 0.5rem;
+  }
+
+  .required {
+    color: #b91c1c;
+    font-size: 0.625rem;
+    font-weight: 600;
+    text-shadow: #ef4444 0 0 4px;
+  }
+
+  .create input ~ input[type='radio'] {
+    margin-left: 0.5rem;
+  }
+
+  .confirm-btn {
+    margin: auto;
+    display: block;
+    height: 2rem;
+    width: 4rem;
+  }
+
+  .modal {
+    padding: 1rem 1rem 0;
+    width: 28rem;
+    max-width: 100%;
+  }
+
+  .modal input {
+    margin-bottom: 1rem;
+    padding: 0.5rem;
+    height: 2rem;
+    width: 100%;
   }
 </style>

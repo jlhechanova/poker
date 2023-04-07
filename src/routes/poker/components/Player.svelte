@@ -21,7 +21,7 @@
     z-index: 50;
   }
 
-  .player .cards {
+  .cards {
     position: absolute;
     width: max-content;
     left: 50%;
@@ -30,7 +30,7 @@
     z-index: 100;
   }
   
-  .player .avatar {
+  .avatar {
     margin-bottom: -0.5rem;
     height: 6rem;
     width: 6rem;
@@ -39,7 +39,7 @@
     background: linear-gradient(20deg, #111827, #64748b);
   }
   
-  .player .info {
+  .info {
     position: relative;
     height: 3rem;
     width: 6rem;

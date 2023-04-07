@@ -6,6 +6,7 @@ export default class Deck {
 
   constructor() {
     this.#deck = [];
+    this.deck();
   }
 
   // must be called before any subsequent deals().

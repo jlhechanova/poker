@@ -1,134 +1,97 @@
 <script lang='ts'>
-  import type PokerTable from '$lib/consts/pokertable';
-  import { createEventDispatcher } from 'svelte';
-  import { fly } from 'svelte/transition';
-  import currency from 'currency.js';
-  export let timeout: NodeJS.Timeout | null = null;
-  export let table: PokerTable;
-  export let seat = -1;
+  import { createEventDispatcher } from "svelte";
+  import { fly } from "svelte/transition";
+  export let bet: number;
+  export let stack: number;
+  export let toMatch: number;
+  export let minRaise: number;
+  export let toAct: boolean;
 
   const sizes = [[3,'3x'], [2,'2x'], [1,'POT'], [0.75,'¾'], [0.5,'½'], [1 / 3,'⅓'], [0.25,'¼']] as const;
-
-  let value = 0;
   
-  let raise = false;
+  let betSlider = 0;
+  let isOpenSlider = false;
 
-  $: player = table && seat >= 0 ? table.players[seat] : undefined;
-
-  $: min = player ? table.toMatch + table.minRaise - player.bets : 1;
-  $: max = player ? player.stack : 100;
-  $: if (!raise) value = min;
-
-  const handleSize = (e: MouseEvent) => {
-    value = table.pot.multiply(e.target.value).value;
-  }
+  const callAmt = toMatch - bet;
+  const minBet = callAmt + minRaise;
+  $: raiseAmt = minBet + Math.round((stack - minBet + 1) ** (betSlider / 100) - 1)
 
   const dispatch = createEventDispatcher();
 
   const handleSubmit = (e: SubmitEvent) => {
-    let action = (<HTMLInputElement> e.submitter).value
-    
-    if (action === 'raise') {
-      if (!raise) {
-        raise = true;
-        return;
-      }
-      else {
-        action = value.toString();
-      }
-    }
     dispatch('submit', {
-      action: action
-    });
+      action: (<HTMLFormElement> e.submitter).value
+    })
   }
+
+  const handleSliderClose = async (e: MouseEvent) => {
+    if (!(<HTMLElement> e.target).closest('.controls')) {
+      isOpenSlider = false;
+      betSlider = 0;
+    }
+  } 
 </script>
 
-<svelte:window on:mouseup={e => {
-  if (!e.target.closest('.actions')) raise = false }} />
+<svelte:window on:mouseup={handleSliderClose}/>
 
-<form class='dashboard' on:submit|preventDefault={handleSubmit} novalidate>
-  <div class='chat'>
-    {#if seat !== -1}
-    <button type='button' class='leave' on:click={() => dispatch('leave')}>Leave</button>
-    {/if}
-  </div>
-
-  {#if timeout}
-  <div class='actions'>
-    <button value='fold'>Fold</button>
-    {#if player.bets === table.toMatch}
-    <button type='submit' value='check'>Check</button>
-    {:else}
+<form class="controls" on:submit|preventDefault={handleSubmit}>
+  <button value='fold'>Fold</button>
+  {#if bet === toMatch}
+    <button value='check'>Check</button>
+  {:else if stack > minBet}
     <button value='call'>Call</button>
+  {/if}
+  {#if toAct || callAmt >= minRaise} <!-- betting round still open ? -->
+    {#if stack > minBet && raiseAmt != stack}
+      {#if !isOpenSlider}
+        <button type='button' on:click={() => isOpenSlider = !isOpenSlider}>Raise</button>
+      {:else}
+        <button value={raiseAmt}>Raise</button>
+      {/if}
+    {:else}
+      <button value={stack}>All In</button>
     {/if}
-    {#if player.stack > table.toMatch - player.bets}
-    <button
-      style:border-top-left-radius={raise ? '0' : '1rem'}
-      style:border-top-right-radius={raise ? '0' : '1rem'}
-      style:background-color={raise ? '#f8fafc' : 'revert'}
-      value='raise'
-    >Raise</button>
-    {/if}
-    {#if raise}
-    <div class='raise' in:fly={{y: 16}} out:fly={{y: 24, duration: 200}}>
-      <div class='slider'>
+  {/if}
+  {#if isOpenSlider}
+    <div class='raise' transition:fly={{y: 16}}>
+      <div class="slider">
         <ul>
           {#each sizes as [mult, size]}
-          <li>
-            <button type='button' value={mult} on:click={handleSize}>{size}</button>
-          </li>
+            <button type='button' value={mult}>{size}</button>
           {/each}
         </ul>
         <div>
           <button type='button'>
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m6-6H6" />
-            </svg>                      
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 5.5v13m6.5-6.5h-13"></path>
+            </svg>                     
           </button>
           <button type='button'>
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M18 12H6" />
-            </svg>            
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 12h-15" />
+            </svg>                     
           </button>
+          <input type='range' bind:value={betSlider} style:background-size={`${betSlider}% 100%`}>
         </div>
-        <input
-          style:background-size={`${value * 100 / max}% 100%`}
-          type='range' min={min} max={max} step='0.5' bind:value>
       </div>
-      <input type='number' bind:value>
+      <input type='number' bind:value={raiseAmt}>
     </div>
-    {/if}
-  </div>
   {/if}
 </form>
 
 <style>
-  .dashboard {
-    margin: auto;
-    max-width: 80rem;
-    position: relative;
-    display: flex;
-    justify-content: space-between;
-    align-items: end;
-    z-index: 10;
-  }
-
-  .chat {
-    padding-left: 10rem;
-  }
-
-  .actions {
+  .controls {
     display: grid;
     grid-template-columns: 1fr 1fr 1fr;
     justify-content: space-between;
   }
 
-  .actions > button, .leave {
+  .controls > button {
     height: 4rem;
-    width: 10rem;
+    width: 8rem;
     border-radius: 1rem;
     border: 0;
-    font-size: 2rem;
+    font-size: 1.5rem;
     font-weight: 800;
     font-family: inherit;
     transition: 0.5s;
@@ -138,7 +101,7 @@
     position: absolute;
     right: 0;
     bottom: 4rem;
-    width: 10rem;
+    width: 8rem;
     padding: 1rem 0;
     display: flex;
     flex-direction: column;
@@ -154,7 +117,6 @@
     display: grid;
     grid-template-columns: 1.25fr 1fr;
     height: 22rem;
-    gap: 0.5rem;
   }
 
   .raise ul {
