@@ -6,6 +6,7 @@
   export let toMatch: number;
   export let minRaise: number;
   export let toAct: boolean;
+  export let handleSubmit: (e: SubmitEvent) => void;
 
   const sizes = [[3,'3x'], [2,'2x'], [1,'POT'], [0.75,'¾'], [0.5,'½'], [1 / 3,'⅓'], [0.25,'¼']] as const;
   
@@ -14,15 +15,7 @@
 
   const callAmt = toMatch - bet;
   const minBet = callAmt + minRaise;
-  $: raiseAmt = minBet + Math.round((stack - minBet + 1) ** (betSlider / 100) - 1)
-
-  const dispatch = createEventDispatcher();
-
-  const handleSubmit = (e: SubmitEvent) => {
-    dispatch('submit', {
-      action: (<HTMLFormElement> e.submitter).value
-    })
-  }
+  $: raiseAmt = minBet + Math.round((stack - minBet + 1) ** (betSlider / 100) - 1);
 
   const handleSliderClose = async (e: MouseEvent) => {
     if (!(<HTMLElement> e.target).closest('.controls')) {
@@ -38,7 +31,7 @@
   <button value='fold'>Fold</button>
   {#if bet === toMatch}
     <button value='check'>Check</button>
-  {:else if stack > minBet}
+  {:else if stack > toMatch}
     <button value='call'>Call</button>
   {/if}
   {#if toAct || callAmt >= minRaise} <!-- betting round still open ? -->

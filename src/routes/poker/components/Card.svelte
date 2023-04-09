@@ -4,7 +4,7 @@
   export let card: Card | null = null;
 </script>
 
-<div class={card ? card.suit : 'back'} transition:fly|local={{y: -16}}>
+<div class={card ? card.suit : 'back'} class:best={card?.best} transition:fly|local={{y: -16}}>
   {#if card}
     <span>{ card.rank }</span>
     <p>{ card.rank }</p>
@@ -37,6 +37,10 @@
     font-size: 4.5rem;
     line-height: 1;
     text-align: center;
+  }
+
+  .best {
+    box-shadow: 0 0 10px 5px #0ff;
   }
 
   :is(.S) {

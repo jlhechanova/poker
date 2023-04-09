@@ -47,7 +47,7 @@ export default class PokerTable {
         this.bigBlind = null;
       } else {
         let i = mod(this.bigBlind.seat - 1, this.players.length);
-        while (!this.players[i] || !this.players[i].stack.value) {
+        while (!this.players[i]) {
           i = mod(i - 1, this.players.length);
         }
         this.bigBlind = this.players[i] as Player;
@@ -102,9 +102,9 @@ export default class PokerTable {
   }
 
   resolveBets() {
-    // players still in the hand that have made an action (fold/bet(n), n >= 0)
+    // players still in the hand that have made an action
     const inRound = this.players.filter(player => 
-      player?.isinHand && (!player.toAct)) as Player[];
+      player?.isinHand && !player.toAct) as Player[];
     
     const inHand = this.getinHand();
 
@@ -120,7 +120,7 @@ export default class PokerTable {
 
     // resolved if every non-allin bet === highest bet
     const resolved = inRound.filter(player => player.stack.value > 0)
-      .every(player => player.bets.value === this.toMatch);
+      .every(player => player.curBets.value === this.toMatch);
 
     return resolved;
   }

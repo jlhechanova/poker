@@ -1,12 +1,26 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import CardComponent from './components/Card.svelte';
-  import PlayerComponent from './components/Player.svelte';
-  import Controls from './components/Controls.svelte';
-  import type Card from '$lib/consts/card';
   import type PokerTable from '$lib/consts/pokertable';
+  import type Card from '$lib/consts/card';
+  import PlayerComponent from './components/Player.svelte';
+  import CardComponent from './components/Card.svelte';
+  import Controls from './components/Controls.svelte';
   import { socket, lobby } from '$lib/stores';
   import { goto } from '$app/navigation';
+
+  const coordsSeat = [
+    {top: '', left: '50%', bottom: '-6rem', right: '', transform: 'translateX(-50%)'},
+    {top: '50%', left: '', bottom: '', right: '-5rem', transform: 'translateY(-50%)'},
+    {top: '-6rem', left: '50%', bottom: '', right: '', transform: 'translateX(-50%)'},
+    {top: '50%', left: '-5rem', bottom: '', right: '', transform: 'translateY(-50%)'},
+  ]
+
+  const coordsBets = [
+    {top: '', left: '50%', bottom: '9.5rem', right: '', transform: 'translateX(-50%)'},
+    {top: '50%', left: '', bottom: '', right: '9.5rem', transform: 'translateY(-50%)'},
+    {top: '9.5rem', left: '50%', bottom: '', right: '', transform: 'translateX(-50%)'},
+    {top: '50%', left: '9.5rem', bottom: '', right: '', transform: 'translateY(-50%)'},
+  ]
 
   let isHost = false;
   let table: PokerTable;
@@ -27,7 +41,6 @@
 
   $socket.on('table', tableInfo => table = tableInfo);
   $socket.on('host', () => isHost = true);
-  $socket.on('showdown', handsInfo => hands = handsInfo);
   $socket.on('hand', hand => {
     if (hand) {
       hands = Array.from({length: table.players.length}, () => Array.from({length: 2}));
@@ -58,6 +71,10 @@
       action = '';
     }, 15000);
   })
+
+  const handleSubmit = (e: SubmitEvent) => {
+    action = (<HTMLFormElement> e.submitter).value;
+  }
 
   const handleJoinTable = async (i: number) => {
     const res = await $socket.emitWithAck('joinTable', i);
@@ -105,7 +122,8 @@
         {#each Array(numPlayers) as _, i (i)}
           {@const idx = (i + seat) % numPlayers}
           {@const player = table.players[idx]}
-          <div class="seat">
+          {@const {top, right, bottom, left, transform} = coordsSeat[i]}
+          <div class="seat" style:top style:right style:bottom style:left style:transform>
             {#if player}
               <PlayerComponent { player }>
                 {#if player.isinHand && hands.length}
@@ -113,8 +131,13 @@
                   <CardComponent card={hand ? hand[0] : null} />
                   <CardComponent card={hand ? hand[1] : null} />
                 {/if}
-                <CardComponent card={{rank: 'A', suit: 'H'}}/>
               </PlayerComponent>
+              {#if player.isinHand && player.curBets}
+                {@const {top, right, bottom, left, transform} = coordsBets[i]}
+                <span style:top style:right style:bottom style:left style:transform>
+                  {player.curBets}
+                </span>
+              {/if}
             {:else}
               <button class="join" on:click={() => handleJoinTable(idx)}>
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="3" stroke="currentColor">
@@ -127,13 +150,13 @@
       </div>
       {#if isinSeat}
         <button class='leave' style:right='-4rem' on:click={handleLeaveTable}>
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M9 8.25H7.5a2.25 2.25 0 00-2.25 2.25v9a2.25 2.25 0 002.25 2.25h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25H15m0-3l-3-3m0 0l-3 3m3-3V15" />
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 8.25H5.5a2.25 2.25 0 00-2.25 2.25v9a2.25 2.25 0 002.25 2.25h13a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25H15m0-3l-3-3m0 0l-3 3m3-3V15" />
           </svg>          
         </button>
       {:else}
         <button class='leave' style:right='-4rem' on:click={handleLeaveRoom}>
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
           </svg>
         </button>
@@ -141,13 +164,13 @@
       {#if table && table.curPlayers >= 2 && isHost}
         {#if table.isOngoing}
           <button class='leave' style:left='-4rem' on:click={() => $socket.emit('pause')}>
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-6 h-6">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25v13.5m-7.5-13.5v13.5" />
             </svg>                   
           </button>
         {:else}
           <button class='leave' style:left='-4rem' on:click={() => $socket.emit('start')}>
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
             </svg>          
           </button>
@@ -160,12 +183,12 @@
   <div></div>
   {#if player && timeout}
     <Controls
-      bet={player.bets} 
+      bet={player.curBets} 
       stack={player.stack} 
       toMatch={table.toMatch}
       minRaise={table.minRaise}
       toAct={player.toAct}
-      on:submit={e => action = e.detail.action}
+      { handleSubmit }
     />
   {/if}
 </div>
@@ -197,28 +220,9 @@
     position: absolute;
   }
 
-  .seats .seat:nth-child(1) {
-    bottom: -6rem;
-    left: 50%;
-    transform: translateX(-50%);
-  }
-
-  .seats .seat:nth-child(2) {
-    right: -5rem;
-    top: 50%;
-    transform: translateY(-50%);
-  }
-
-  .seats .seat:nth-child(3) {
-    top: -6rem;
-    left: 50%;
-    transform: translateX(-50%);
-  }
-  
-  .seats .seat:nth-child(4) {
-    left: -5rem;
-    top: 50%;
-    transform: translateY(-50%);
+  .seat span {
+    position: absolute;
+    color: white;
   }
 
   .join {

@@ -124,7 +124,8 @@ export const myServer = (server) => {
         const sockets = await io.to(roomID).fetchSockets();
         if (!sockets.length) {
           console.log(`${room.name} has been closed`);
-          return rooms.delete(roomID);
+          rooms.delete(roomID);
+          return;
         }
 
         const newHost = sockets[0];

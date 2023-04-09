@@ -3,11 +3,6 @@ import { rankVal, suits, type HandValue } from '../consts';
 
 export const mod = (n: number, m: number) => ((n % m + m) % m);
 
-const cardstoVal = (acc: number[] = [], card: Card) => {
-  acc.push(rankVal[card.rank]);
-  return acc;
-}
-
 export const handComparator = (a: HandValue, b: HandValue) => { // desc
   let d = b.value - a.value;
   if (d) return d;

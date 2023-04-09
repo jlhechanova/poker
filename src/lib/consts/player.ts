@@ -5,6 +5,7 @@ export default class Player {
   name: string;
   seat: number;
   stack: currency;
+  curBets: currency;
   bets: currency;
   isinSeat: boolean;
   isinHand: boolean;
@@ -15,6 +16,7 @@ export default class Player {
     this.name = name;
     this.seat = seat;
     this.stack = currency(blinds * 200);
+    this.curBets = currency(0);
     this.bets = currency(0);
     this.isinSeat = true;
     this.isinHand = false;
@@ -27,6 +29,6 @@ export default class Player {
 
   bet(amount: number) {
     this.stack = this.stack.subtract(amount);
-    this.bets = this.bets.add(amount);
+    this.curBets = this.curBets.add(amount);
   }
 }

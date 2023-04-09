@@ -5,7 +5,7 @@ import currency from 'currency.js';
 import type Player from '../src/lib/consts/player';
 
 const prehand = (room: Room, io: Server) => {
-  let table = room.table;
+  const table = room.table;
   table.players.forEach(player => {
     if (player) {
       if (player.isinSeat && player.stack.value > 0) {
@@ -24,17 +24,17 @@ const prehand = (room: Room, io: Server) => {
 }
 
 const preflop = (room: Room, io: Server) => {
-  let table = room.table;
+  const table = room.table;
 
-  let players = table.getinSeat();
+  const players = table.getinSeat();
 
   // update bb
   let i = players.findIndex(player => player === table.bigBlind);
   table.bigBlind = players[(i + 1) % players.length];
 
   // post blinds
-  let bb = players[(i + 1) % players.length]
-  let sb = players[(i + 2) % players.length]
+  const bb = players[(i + 1) % players.length]
+  const sb = players[(i + 2) % players.length]
   bb.bet(Math.min(bb.stack.value, 2 * table.blinds));
   sb.bet(Math.min(sb.stack.value, table.blinds));
   table.pot = table.pot.add(3 * table.blinds);
@@ -42,11 +42,11 @@ const preflop = (room: Room, io: Server) => {
   table.minRaise = table.toMatch;
 
   // deal hands
-  let deck = room.deck;
-  let hands = room.hands;
+  const deck = room.deck;
+  const hands = room.hands;
   table.players.forEach(player => {
     if (player) {
-      let hand = [deck.deal(), deck.deal()];
+      const hand = [deck.deal(), deck.deal()];
       io.to(player.sid).emit('hand', hand);
       hands.push(hand);
     } else {
@@ -57,26 +57,22 @@ const preflop = (room: Room, io: Server) => {
 }
 
 const street = (room: Room, io: Server) => {
-  let table = room.table;
-  let deck = room.deck;
+  const table = room.table;
+  const deck = room.deck;
 
   if (table.phaseid == 2) { // flop
     table.board = [deck.deal(), deck.deal(), deck.deal()];
   } else { // turn/river
     table.board.push(deck.deal());
   }
-  
-  // set toAct for betting round
-  table.getinPlay().forEach(player => player.toAct = true);
-  table.minRaise = 2 * table.blinds;
 
   io.to(room.id).emit('table', table);
 }
 
 const showdown = (room: Room, io: Server) => {
-  let table = room.table;
-  let hands = room.hands;
-  let inHand = table.getinHand();
+  const table = room.table;
+  const hands = room.hands;
+  const inHand = table.getinHand();
 
   if (inHand.length === 1) {
     inHand[0].topup(table.pot.value);
@@ -84,8 +80,8 @@ const showdown = (room: Room, io: Server) => {
     return;
   }
 
-  let result = calculateHandOutcome(table.board, hands);
-  let ranking = Array.from(result.entries());
+  const result = calculateHandOutcome(table.board, hands);
+  const ranking = Array.from(result.entries());
 
   let i = 0;
   while (table.pot.value) {
@@ -96,37 +92,38 @@ const showdown = (room: Room, io: Server) => {
       // (doesnt matter if only one player since this will
       // just calculate their max possible winnings then
       // move to next tier if there is still money in the pot)
-      let min = winners.reduce((prev, curr) =>
+      const min = winners.reduce((prev, curr) =>
         table.players[prev].bets.value < table.players[curr].bets.value ? prev : curr);
-      let minPlayer = table.players[min] as Player;
+      const minPlayer = table.players[min] as Player;
 
       // collect minPlayer bet amount from each player in the pot.
       // this is the main pot / series of sidepots
-      let pot = table.players.reduce((acc, player) => {
+      const pot = table.players.reduce((acc, player) => {
         if (player && player.bets.value) {
-          let amount = Math.min(minPlayer.bets.value, player.bets.value);
+          const amount = Math.min(minPlayer.bets.value, player.bets.value);
           player.bets = player.bets.subtract(amount);
           acc = acc.add(amount);
         }
         return acc;
       }, currency(0));
   
+      // subtract this pot from table pot.
+      table.pot = table.pot.subtract(pot);
+
       // distribute this pot to all players in this hand strength.
-      let dist = pot.distribute(winners.length);
+      const dist = pot.distribute(winners.length);
       dist.forEach((cur, idx) => table.players[winners[idx]].topup(cur.value));
 
       // remove player(s) that have received their max possible winnings
       winners = winners.filter(seat => table.players[seat].bets.value);
-
-      // subtract this pot from table pot.
-      table.pot = table.pot.subtract(pot);
     }
+
     i++;
   }
 }
 
 const posthand = (room: Room, io: Server) => {
-  let table = room.table;
+  const table = room.table;
   table.players.forEach(player => {
     if (player) {
       player.isinHand = false;
@@ -148,8 +145,8 @@ const posthand = (room: Room, io: Server) => {
 }
 
 /*  BETTING ROUND
- *  1. find utg
- *  2. starting from utg, player actions until betting round ends.
+ *  1. find first to play
+ *  2. player actions until betting round ends.
  * 
  *  the betting round ends in three ways:
  *  1. only 1 player left in the hand
@@ -162,16 +159,22 @@ const posthand = (room: Room, io: Server) => {
  *  handled by the PokerTable.resolveBets() method.
  */
 const betRound = async (room: Room, io: Server) => {
-  let table = room.table;
-  let hands = room.hands;
-  let len = table.players.length;
+  const table = room.table;
+  const hands = room.hands;
+  const numPlayers = table.players.length;
   
-  let i = mod(table.bigBlind.seat - 1, len);
+  let i = table.bigBlind.seat;
+  if (table.phaseid === 1) { // preflop, find utg
+    i = mod(i - 1, numPlayers);
+  } else { // find sb
+    i = (i + 1) % numPlayers;
+    while (!table.players[i]) i = (i + 1) % numPlayers;
+  }
   let player = table.players[i];
   while (!table.resolveBets()) {
     // skip players not in hand or zero stack;
     while (!player || !player.isinHand || !player.stack.value) {
-      i = mod(i - 1, len);
+      i = mod(i - 1, numPlayers);
       player = table.players[i];
     }
 
@@ -187,7 +190,9 @@ const betRound = async (room: Room, io: Server) => {
       action = 'fold';
     }
 
-    if (action === 'check' && player.bets.value < table.toMatch) {
+    console.log(action);
+
+    if (action === 'check' && player.curBets.value < table.toMatch) {
       action = 'fold';
     }
 
@@ -197,11 +202,12 @@ const betRound = async (room: Room, io: Server) => {
       
       case 'fold':
         player.isinHand = false;
+        player.bets = player.bets.add(player.curBets);
         hands[player.seat] = undefined;
         break;
 
       case 'call':
-        let callAmt = table.toMatch - player.bets.value
+        let callAmt = table.toMatch - player.curBets.value
         let amount = Math.min(callAmt, player.stack.value);
         player.bet(amount);
         table.currPot = table.currPot.add(amount);
@@ -212,17 +218,18 @@ const betRound = async (room: Room, io: Server) => {
 
         if (isNaN(bet)) { // invalid input -> fold
           player.isinHand = false;
+          player.bets = player.bets.add(player.curBets);
           hands[player.seat] = undefined;
         } else {
-          let callAmt = table.toMatch - player.bets.value;
+          let callAmt = table.toMatch - player.curBets.value;
           bet = Math.max(bet, callAmt + table.minRaise);
 
           let amount = Math.min(bet, player.stack.value);
           player.bet(amount);
           table.currPot = table.currPot.add(amount);
 
-          table.minRaise = player.bets.subtract(table.toMatch).value;
-          table.toMatch = player.bets.value;
+          table.minRaise = player.curBets.subtract(table.toMatch).value;
+          table.toMatch = player.curBets.value;
         }
     }
 
@@ -231,17 +238,30 @@ const betRound = async (room: Room, io: Server) => {
     }
 
     io.emit('table', table);
-    i = mod(i - 1, len);
+    i = mod(i - 1, numPlayers);
     player = table.players[i];
   }
+  
+  // set for next betting round
+  table.players.forEach(player => {
+    if (player) {
+      if (player.curBets) {
+        player.bets = player.bets.add(player.curBets);
+        player.curBets = currency(0);
+      }
+
+      if (player.isinHand && player.stack.value) player.toAct = true;
+    }
+  });
+  table.toMatch = 0;
+  table.minRaise = 2 * table.blinds;
 
   table.pot = table.pot.add(table.currPot);
   table.currPot = currency(0);
 
   // if only one player left after betting, skip to showdown.
   if (table.getinHand().length === 1) {
-    // will increment after return
-    table.phaseid = 4;
+    table.phaseid = 4; // will increment after return
     table.phase = 'river';
   }
 }
@@ -257,7 +277,7 @@ const runHand = (room: Room, io: Server) => {
     let phaseid = table.phaseid
     phases[phaseid](room, io);
     
-    if (phaseid >= 1 && phaseid <= 4 && table.curPlayers >= 2) 
+    if (phaseid >= 1 && phaseid <= 4 && table.getinPlay().length > 1) 
     {
       await betRound(room, io);
     }
@@ -266,7 +286,7 @@ const runHand = (room: Room, io: Server) => {
       table.nextPhase();
       setTimeout(() => {
         runPhase();
-      }, 1000);
+      }, phaseid === 5 ? 2000 : 1000);
     } else {
       table.isOngoing = false;
     }
