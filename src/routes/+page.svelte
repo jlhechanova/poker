@@ -4,7 +4,6 @@
   import { goto } from '$app/navigation';
   import Modal from './Modal.svelte';
 
-  const levels = [1, 2, 5, 10, 25, 50, 100, 200];
   let showModal = false;
   let query = '';
 
@@ -71,11 +70,12 @@
               {#await $socket.emitWithAck('getRooms') then rooms}
                 <tbody on:click={handleTable} on:dblclick={handleJoin}>
                   {#each rooms.filter(room => room.name.includes(query)) as room (room.id)}
-                    <tr data-id={room.id} tabindex="0">
-                      <td>{#if room.passcode}🔒{/if}{room.name}</td>
-                      <td>{room.host.name}</td>
-                      <td>{room.table.blinds}/{room.table.blinds * 2}</td>
-                      <td>{room.table.curPlayers}/{room.table.maxPlayers}</td>
+                    {@const {id, pass, name, host, blinds, curPlayers, maxPlayers} = room}
+                    <tr data-id={id} tabindex="0">
+                      <td>{#if pass}🔒{/if}{name}</td>
+                      <td>{host}</td>
+                      <td>{blinds}/{blinds * 2}</td>
+                      <td>{curPlayers}/{maxPlayers}</td>
                     </tr>
                   {/each}
                 </tbody>
