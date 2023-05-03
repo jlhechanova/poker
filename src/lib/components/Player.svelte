@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type Player from '$lib/consts/player';
+  import type Player from '@backend/classes/player';
   export let player: Player;
 </script>
 

@@ -1,7 +1,7 @@
 import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vite';
 
-import { myServer } from './server';
+import { myServer } from './server/dev';
 
 const webSocketServer = {
 	name: 'webSocketServer',
@@ -11,5 +11,5 @@ const webSocketServer = {
 }
 
 export default defineConfig({
-	plugins: [sveltekit(), webSocketServer]
+	plugins: [sveltekit(), webSocketServer],
 });

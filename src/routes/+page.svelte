@@ -54,43 +54,36 @@
       </form>
 
       {#if option === 'join'}
-        {#await $socket.emitWithAck('getRooms') then rooms}
-          <div class='join' transition:slide>
-            <p class='heading'>JOIN</p>
-            <hr>
-            <div class='rooms'>
-              <div class='field'>
-                <input bind:value={query} name='search' placeholder='Search' autocomplete='off'>
-                <button on:click={() => option = 'join'}>
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
-                  </svg>
-                </button>
-              </div>
-              <table cellspacing='0'>
-                <thead>
-                  <tr>
-                    <th style:text-align='left'>Lobby</th>
-                    <th>Host</th>
-                    <th style:width='4rem'>Blinds</th>
-                    <th style:width='4rem'>Players</th>
-                  </tr>
-                </thead>
+        <div class='join' transition:slide>
+          <p class='heading'>JOIN</p>
+          <hr>
+          <div class='rooms'>
+            <input bind:value={query} name='search' placeholder='Search' autocomplete='off'>
+            <table cellspacing='0'>
+              <thead>
+                <tr>
+                  <th style:text-align='left'>Lobby</th>
+                  <th>Host</th>
+                  <th style:width='4rem'>Blinds</th>
+                  <th style:width='4rem'>Players</th>
+                </tr>
+              </thead>
+              {#await $socket.emitWithAck('getRooms') then rooms}
                 <tbody on:click={handleTable} on:dblclick={handleJoin}>
                   {#each rooms.filter(room => room.name.includes(query)) as room (room.id)}
                     <tr data-id={room.id} tabindex="0">
-                      <td>{room.name}{#if room.passcode}🔒{/if}</td>
+                      <td>{#if room.passcode}🔒{/if}{room.name}</td>
                       <td>{room.host.name}</td>
                       <td>{room.table.blinds}/{room.table.blinds * 2}</td>
                       <td>{room.table.curPlayers}/{room.table.maxPlayers}</td>
                     </tr>
                   {/each}
                 </tbody>
-              </table>
-            </div>
-            <button class='confirm-btn' on:click={handleJoin}>JOIN</button>
+              {/await}
+            </table>
           </div>
-        {/await}
+          <button class='confirm-btn' on:click={handleJoin}>JOIN</button>
+        </div>
 
       {:else if option === 'create'}
         <form class='create' on:submit|preventDefault={handleCreate} transition:slide>
@@ -105,27 +98,6 @@
             <label for='passcode'>
               <p>Passcode</p>
               <input type='text' id='passcode' name='passcode' placeholder="It's a secret!" autocomplete="off">
-            </label>
-
-            <div>
-              <p>Players</p>
-              <input type='radio' id='max4' name='players' value='4' checked>
-              <label for='max4'>4</label>
-              <input type='radio' id='max9' name='players' value='9'>
-              <label for='max9'>9</label>
-              <input type='radio' id='max6' name='players' value='6'>
-              <label for='max6'>6</label>
-              <input type='radio' id='max2' name='players' value='2'>
-              <label for='max2'>2</label>
-            </div>
-  
-            <label for='blinds'>
-              <p>Blinds</p>
-              <select id='blinds' name='blinds'>
-                {#each levels as level}
-                  <option value={level}>{level}/{2*level}</option>
-                {/each}
-              </select>
             </label>
           </div>
           <button class='confirm-btn'>OK</button>
@@ -202,20 +174,10 @@
     padding: 1rem;
   }
 
-  .rooms .field {
-    display: flex;
-  }
-
-  .field input {
+  input[name='search'] {
     padding: 0.5rem;
     height: 2rem;
-    flex-grow: 1;
-  }
-
-  .field button {
-    height: 2rem;
-    aspect-ratio: 1/1;
-    vertical-align: middle;
+    width: 100%;
   }
 
   table {
@@ -253,10 +215,6 @@
     font-size: 0.625rem;
     font-weight: 600;
     text-shadow: #ef4444 0 0 4px;
-  }
-
-  .create input ~ input[type='radio'] {
-    margin-left: 0.5rem;
   }
 
   .confirm-btn {

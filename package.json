@@ -7,10 +7,12 @@
 		"build": "vite build",
 		"preview": "vite preview",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch"
+		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
+		"start": "node ./server"
 	},
 	"devDependencies": {
 		"@sveltejs/adapter-auto": "^2.0.0",
+		"@sveltejs/adapter-node": "^1.2.3",
 		"@sveltejs/kit": "^1.5.0",
 		"@types/uuid": "^9.0.1",
 		"svelte": "^3.54.0",
@@ -22,7 +24,10 @@
 	"type": "module",
 	"dependencies": {
 		"@fontsource/manrope": "^4.5.13",
+		"@types/express": "^4.17.17",
 		"currency.js": "^2.0.4",
+		"express": "^4.18.2",
+		"pokersolver": "^2.1.4",
 		"socket.io": "^4.6.1",
 		"socket.io-client": "^4.6.1",
 		"uuid": "^9.0.0"

@@ -1,14 +1,15 @@
 <script lang='ts'>
-  import { createEventDispatcher } from "svelte";
   import { fly } from "svelte/transition";
+  import { sizes } from "$lib/consts";
   export let bet: number;
   export let stack: number;
   export let toMatch: number;
   export let minRaise: number;
+  export let pot: number;
   export let toAct: boolean;
-  export let handleSubmit: (e: SubmitEvent) => void;
+  export let handleAction: (e: SubmitEvent) => void;
 
-  const sizes = [[3,'3x'], [2,'2x'], [1,'POT'], [0.75,'¾'], [0.5,'½'], [1 / 3,'⅓'], [0.25,'¼']] as const;
+  const log = (arg: number, base: number) => Math.log(arg) / Math.log(base);
   
   let betSlider = 0;
   let isOpenSlider = false;
@@ -17,27 +18,34 @@
   const minBet = callAmt + minRaise;
   $: raiseAmt = minBet + Math.round((stack - minBet + 1) ** (betSlider / 100) - 1);
 
-  const handleSliderClose = async (e: MouseEvent) => {
-    if (!(<HTMLElement> e.target).closest('.controls')) {
+  const handleSliderClose = (e: MouseEvent) => {
+    if (!(<HTMLElement> e.target).closest('.actions')) {
       isOpenSlider = false;
       betSlider = 0;
     }
-  } 
+  }
+
+  const handleRaiseAmt = (amt: number) => {
+    if (amt > stack) amt = stack;
+    else if (amt < minBet) amt = minBet;
+
+    betSlider = 100 * log(amt - minBet + 1, stack - minBet + 1);
+  }
 </script>
 
-<svelte:window on:mouseup={handleSliderClose}/>
+<svelte:window on:mousedown={handleSliderClose}/>
 
-<form class="controls" on:submit|preventDefault={handleSubmit}>
+<form class="actions" on:submit|preventDefault={handleAction}>
   <button value='fold'>Fold</button>
   {#if bet === toMatch}
     <button value='check'>Check</button>
   {:else if stack > toMatch}
     <button value='call'>Call</button>
   {/if}
-  {#if toAct || callAmt >= minRaise} <!-- betting round still open ? -->
-    {#if stack > minBet && raiseAmt != stack}
+  {#if true || callAmt >= minRaise} <!-- betting round still open ? -->
+    {#if raiseAmt != stack && stack > minBet}
       {#if !isOpenSlider}
-        <button type='button' on:click={() => isOpenSlider = !isOpenSlider}>Raise</button>
+        <button type='button' on:click={() => isOpenSlider = true}>Raise</button>
       {:else}
         <button value={raiseAmt}>Raise</button>
       {/if}
@@ -50,16 +58,20 @@
       <div class="slider">
         <ul>
           {#each sizes as [mult, size]}
-            <button type='button' value={mult}>{size}</button>
+            <li>
+              <button type='button' value={mult} on:click={() => handleRaiseAmt(pot * mult)}>
+                {size}
+              </button>
+            </li>
           {/each}
         </ul>
         <div>
-          <button type='button'>
+          <button type='button' on:click={() => handleRaiseAmt(raiseAmt + 1)}>
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" d="M12 5.5v13m6.5-6.5h-13"></path>
             </svg>                     
           </button>
-          <button type='button'>
+          <button type='button' on:click={() => handleRaiseAmt(raiseAmt - 1)}>
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
               <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 12h-15" />
             </svg>                     
@@ -67,19 +79,19 @@
           <input type='range' bind:value={betSlider} style:background-size={`${betSlider}% 100%`}>
         </div>
       </div>
-      <input type='number' bind:value={raiseAmt}>
+      <input type='number' bind:value={raiseAmt} on:change={e => handleRaiseAmt(e.target.value)}>
     </div>
   {/if}
 </form>
 
 <style>
-  .controls {
+  .actions {
     display: grid;
     grid-template-columns: 1fr 1fr 1fr;
     justify-content: space-between;
   }
 
-  .controls > button {
+  .actions > button {
     height: 4rem;
     width: 8rem;
     border-radius: 1rem;

@@ -1,13 +1,14 @@
 <script lang="ts">
-  import type Card from "$lib/consts/card";
   import { fly } from 'svelte/transition';
-  export let card: Card | null = null;
+  import type { ICard } from '$lib/consts';
+  export let card: ICard;
 </script>
 
-<div class={card ? card.suit : 'back'} class:best={card?.best} transition:fly|local={{y: -16}}>
+<div class={card ? card[1] : 'h'} transition:fly|local={{y: -16}}>
   {#if card}
-    <span>{ card.rank }</span>
-    <p>{ card.rank }</p>
+    {@const rank = card[0]}
+    <span>{ rank }</span>
+    <span>{ rank }</span>
   {/if}
 </div>
 
@@ -28,34 +29,34 @@
     background: linear-gradient(20deg, #111827, #475569);
   }
 
-  span {
+  span:first-child {
     font-size: 1.5rem;
     line-height: 1.25;
   }
 
-  p {
+  span:last-child {
     font-size: 4.5rem;
     line-height: 1;
     text-align: center;
   }
 
-  .best {
+  .winning {
     box-shadow: 0 0 10px 5px #0ff;
   }
 
-  :is(.S) {
+  :is(.s) {
     background: linear-gradient(20deg, #111827, #475569);
   }
 
-  :is(.C) {
+  :is(.c) {
     background: linear-gradient(20deg, #14532d, #16a34a);
   }
 
-  :is(.H) {
+  :is(.h) {
     background: linear-gradient(20deg, #7f1d1d, #ef4444);
   }
 
-  :is(.D) {
+  :is(.d) {
     background: linear-gradient(20deg, #0c4a6e, #0284c7);
   }
 </style>
