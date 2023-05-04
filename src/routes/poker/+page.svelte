@@ -12,32 +12,27 @@
 
   let table: PokerTable,
       seat = 0,
+      hand: ICard[],
       isHost = false,
-      isinSeat = false,
-      hands: ICard[] = [];
+      isinSeat = false;
 
   $: console.log(table);
-  $: ({players, blinds, turn, button, phaseid, isPaused,
-      board, pot, curPot, toMatch, minRaise} = table ?? {});
+  $: ({players, blinds, turn, button, phaseid, isPaused, best,
+      hands, board, pot, curPot, toMatch, minRaise} = table ?? {});
 
   onMount(async () => {
     const tableState = await $socket.emitWithAck('getTable', $lobby);
-
     if (tableState) table = tableState;
     else goto('/');
   })
 
   $socket.on('host', () => isHost = true);
   $socket.on('tableState', state => table = {...table, ...state});
-  $socket.on('hand', hand => {
-    hands = Array.from({length: players.length});
-    if (hand) hands[seat] = hand;
-  });
 
   let action = '';
   let interval: NodeJS.Timeout;
   let timeout: NodeJS.Timeout | null = null;
-  $socket.on('action', fn => {
+  const handleAction = (fn: (arg?: any) => void) => {
     interval = setInterval(() => {
       if (action && timeout) {
         clearTimeout(timeout);
@@ -54,10 +49,16 @@
       timeout = null;
       action = '';
     }, 15000);
-  })
+  }
 
-  const handleAction = (e: SubmitEvent) => {
-    action = (<HTMLFormElement> e.submitter).value;
+  const handleLeaveTable = () => {
+    if (timeout) action = 'fold';
+
+    isinSeat = false;
+    $socket.off('out');
+    $socket.off('hand');
+    $socket.off('action');
+    $socket.emit('leaveTable', seat);
   }
 
   const handleJoinTable = async (i: number) => {
@@ -65,16 +66,18 @@
 
     const res = await $socket.emitWithAck('joinTable', i);
     if (res) {
-      if (!isinSeat) isinSeat = true;
       seat = i;
+      if (!isinSeat) {
+        isinSeat = true;
+        $socket.on('out', () => handleLeaveTable());
+        $socket.on('hand', h => hand = h);
+        $socket.on('action', handleAction);
+      }
     }
   }
 
-  const handleLeaveTable = () => {
-    if (timeout) action = 'fold';
-
-    isinSeat = false;
-    $socket.emit('leaveTable', seat);
+  const handleSubmit = (e: SubmitEvent) => {
+    action = (<HTMLFormElement> e.submitter).value;
   }
 
   onDestroy(() => {
@@ -96,7 +99,7 @@
           </div>
         {/if}
         {#each board as card}
-          <Card { card } />
+          <Card {card} best={best?.includes(card)}/>
         {/each}
       </div>
       <div class="seats">
@@ -106,11 +109,17 @@
           {@const {top, right, bottom, left, transform} = coordsSeat[i]}
           <div class="seat" style:top style:right style:bottom style:left style:transform>
             {#if player}
-              <Player { player }>
-                {#if player.isinHand}
-                  {@const hand = hands[idx]}
-                  <Card card={hand ? hand[0] : ''} />
-                  <Card card={hand ? hand[1] : ''} />
+              <Player {player}>
+                <!-- always show plain user hand except 
+                  when its a winning hand in showdown -->
+                {#if !i && hand && (!hands || !hands[seat])}
+                  <Card card={hand[0]} />
+                  <Card card={hand[1]} />
+                {:else if player.isinHand}
+                  {@const hand = hands ? hands[idx] : null}
+                  {@const [one, two] = hand ?? ''}
+                  <Card card={one} best={best?.includes(one)}/>
+                  <Card card={two} best={best?.includes(two)}/>
                 {/if}
               </Player>
               {#if player.isinHand && player.curBets}
@@ -163,15 +172,15 @@
 <div class='hud'>
   <div></div>
   {#if isinSeat}
-    {@const player = table.players[seat]}
+    {@const player = players[seat]}
     <Actions
-      bet={player.curBets} 
+      bet={player.curBet} 
       stack={player.stack} 
       toMatch={toMatch}
       minRaise={minRaise}
       pot={pot + curPot}
       toAct={player.toAct}
-      {handleAction}
+      {handleSubmit}
     />
   {/if}
 </div>
