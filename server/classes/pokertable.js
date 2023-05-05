@@ -11,6 +11,7 @@ export default class PokerTable {
     this.players = Array.from({length: maxPlayers});
     this.blinds = blinds;
     this.deck = new Deck();
+    this.best = '';
     this.hands = [];
     this.curPlayers = 0;
     this.maxPlayers = maxPlayers;
@@ -26,7 +27,7 @@ export default class PokerTable {
     this.pot = currency(0);
     this.toMatch = 0;
     this.minRaise = 2 * blinds;
-    this.aggressor = undefined;
+    this.raiser = undefined;
   }
 
   async run() {
@@ -48,14 +49,7 @@ export default class PokerTable {
           this.turn = this.nextActingPlayer(phaseid === 1 ? 
             this.bigBlind : this.button); // utg if preflop else sb
 
-          io.to(roomID).emit('tableState', {
-            players: this.players,
-            turn: this.turn,
-            curPot: this.curPot,
-            toMatch: this.toMatch,
-            minRaise: this.minRaise,
-          });
-
+          io.to(roomID).emit('tableState', {turn: this.turn});
           await this.betRound();
         }
       }
@@ -66,16 +60,22 @@ export default class PokerTable {
 
     if (this.turn !== undefined) return; // pause betting, dont incr phase
 
-    this.isOngoing = setTimeout(async () => {
+    this.isOngoing = setTimeout(() => {
       this.isOngoing = null;
       if (this.isPaused) return;
 
       if (this.curPlayers > 1) {
         this.phaseid = ++phaseid % 5;
-        io.to(roomID).emit('tableState', {phaseid: phaseid});
+        io.to(roomID).emit('tableState', {
+          players: this.players,
+          phaseid: this.phaseid,
+          pot: this.pot,
+          curPot: this.curPot,
+        });
         this.run();
       } else {
         this.isPaused = true;
+        io.to(roomID).emit('tableState', {isPaused: true});
       }
     }, 1000);
   }
@@ -96,7 +96,7 @@ export default class PokerTable {
       }
     });
 
-    // update key positions
+    // find key seats
     let button = this.nextActingPlayer(this.button);
     let smBlind = this.nextActingPlayer(button);
     let bigBlind = this.nextActingPlayer(smBlind);
@@ -106,6 +106,7 @@ export default class PokerTable {
       smBlind = button;
     }
 
+    // update key seats
     this.button = button;
     this.smBlind = smBlind;
     this.bigBlind = bigBlind;
@@ -115,8 +116,11 @@ export default class PokerTable {
     const bb = players[bigBlind];
     sb.bet(Math.min(sb.stack.value, blinds));
     bb.bet(Math.min(bb.stack.value, 2 * blinds));
+    if (!sb.stack.value) sb.toAct = false;
+    if (!bb.stack.value) bb.toAct = false;
     this.curPot = bb.totalBet.add(sb.totalBet);
     this.toMatch = Math.max(bb.totalBet.value, sb.totalBet.value);
+    this.raiser = bb.bet.value > sb.bet.value ? bigBlind : smBlind;
 
     io.to(roomID).emit('tableState', {
       players: players,
@@ -127,20 +131,18 @@ export default class PokerTable {
   }
 
   street() {
-    const {io, roomID, phaseid, deck} = this;
+    const {phaseid, deck} = this;
     if (phaseid === 2) { // flop
       this.board = deck.draw(3);
     } else { // turn/river
       this.board.push(deck.draw()[0]);
     }
-
-    io.to(roomID).emit('tableState', {
-      board: this.board,
-    });
+    this.io.to(this.roomID).emit('tableState', {board: this.board});
   }
 
   async betRound() {
-    const player = this.players[this.turn];
+    const players = this.players;
+    const player = players[this.turn];
     let action = 'check';
 
     // get action from user
@@ -175,43 +177,69 @@ export default class PokerTable {
         break;
 
       case 'call':
-        let callAmt = Math.min(stack.value, toMatch - curBet.value);
+        const callAmt = Math.min(stack.value, toMatch - curBet.value);
 
         player.bet(callAmt);
         this.curPot = curPot.add(callAmt);
         break;
 
       default: // raise
-        let amount = Number(action); // should be an int, cast for checking
+        let amount = Number(action); // convert for checking
 
         if (isNaN(amount)) { // invalid input -> fold
           player.isinHand = false;
         } else {
-          let callAmt = Math.min(stack.value, toMatch - curBet.value);
+          const callAmt = toMatch - curBet.value;
 
-          // ensure amount is at least minRaise
-          amount = Math.max(callAmt + minRaise, amount);
+          // ensure amount is at least min raise amd at most player stack
+          amount = Math.min(stack.value,
+            Math.max(callAmt + minRaise, amount));
           player.bet(amount);
 
-          // update values for pot, amount to match, min raise, and aggressor
+          // update values for pot, amount to match, min raise, and raiser
           this.curPot = curPot.add(amount);
-          this.toMatch = curBet.value;
-          this.minRaise = Math.max(curBet.subtract(toMatch).value, minRaise);
-          this.aggressor = player.seat;
+          this.minRaise = Math.max(minRaise,
+            player.curBet.subtract(toMatch).value);
+          this.toMatch = player.curBet.value;
+          this.raiser = player.seat;
         }
     }
 
-    this.turn = this.betResolved() ? undefined : this.nextActingPlayer(this.turn);
+    // if resolved, normalize pot and max player bet
+    if (this.betResolved()) {
+      const max = players.find(player => // find player with highest bet
+        player && player.curBet.value === this.toMatch);
+      const next = players.reduce((prev, curr) => { // next highest bet
+        if (!prev || prev === max) return curr;
+        if (!curr) return prev;
+        return curr === max || 
+          prev.totalBet.value > curr.totalBet.value ? prev : curr;
+      });
 
+      // if max player bet is higher than next highest bet,
+      // return excess to max player and adjust pot amount
+      if (max.totalBet.value > next.totalBet.value) {
+        const excess = max.totalBet.subtract(next.totalBet).value;
+        this.curPot = this.curPot.subtract(excess);
+        max.stack = max.stack.add(excess);
+        max.totalBet = currency(next.totalBet);
+      }
+
+      this.turn = undefined;
+    } else {
+      this.turn = this.nextActingPlayer(this.turn);
+    }
+
+    // emit state to client before possible reset
     this.io.to(this.roomID).emit('tableState', {
       players: this.players,
       turn: this.turn,
       curPot: this.curPot,
       toMatch: this.toMatch,
       minRaise: this.minRaise,
-    })
+    });
 
-    this.turn === undefined ? this.betInit() : await this.betRound();
+    this.turn === undefined ? this.betReset() : await this.betRound();
   }
 
   betResolved() {
@@ -225,19 +253,22 @@ export default class PokerTable {
       return false; // some players have not yet acted
     }
 
-    // resolved if every non-allin bet === highest bet
+    // true if every non-allin bet === highest bet.
     return inHand.every(player => !player.stack.value 
       || player.curBet.value === this.toMatch);
   }
 
-  betInit() {
-    this.curPot = currency(0);
-    this.toMatch = 0;
-    this.minRaise = 2 * this.blinds;
+  betReset() {
+    if (this.curPot.value) {
+      this.pot = this.pot.add(this.curPot);
+      this.toMatch = 0;
+      this.minRaise = 2 * this.blinds;
+      this.curPot = currency(0);
+    }
     this.players.forEach(player => {
       if (player) {
         if (player.isinHand && player.stack.value) player.toAct = true;
-        player.curBet = currency(0);
+        if (player.curBet.value) player.curBet = currency(0);
       }
     })
   }
@@ -248,13 +279,20 @@ export default class PokerTable {
     let inHand = players.filter(player => player?.isinHand);
 
     if (inHand.length === 1) {
-      inHand[0].winnings = pot;
+      const player = inHand[0];
+      player.curBet = pot;
       this.pot = currency(0);
       players.forEach(player => {
         if (player?.totalBet.value) player.totalBet = currency(0);
       });
 
-      io.to(roomID).emit('tableState', {players: players});
+      io.to(roomID).emit('tableState', {
+        players: players,
+        pot: this.pot,
+      });
+
+      player.stack = player.stack.add(pot);
+      player.curBet = currency(0);
       return;
     }
 
@@ -262,12 +300,12 @@ export default class PokerTable {
     let solvedHands = inHand.map(player => 
       Hand.solve(board.concat(hands[player.seat])));
 
-    while (pot.value) {
+    while (pot.value) { // uses fact that sum of player bets === pot
       const best = Hand.winners(solvedHands);
       const seats = best.map(hand => solvedHands.indexOf(hand));
       let winners = seats.map(seat => inHand[seat]);
       while (winners.length) {
-        // get total bet amount of player with lowest money in the pot
+        // get lowest bet amount from winning players
         const minAmt = winners.length === 1 ? winners[0].totalBet.value
         : winners.reduce((prev, curr) => {
           const a = prev.totalBet.value;
@@ -275,7 +313,8 @@ export default class PokerTable {
           return a < b ? a : b;
         });
 
-        // solve for main pot by collecting at most minAmt from each player
+        // solve for main pot by collecting at most minAmt from each player.
+        // this excludes players that no longer have money in the pot
         const mainPot = players.reduce((acc, player) => {
           if (player?.totalBet.value) {
             const amount = Math.min(player.totalBet.value, minAmt);
@@ -286,10 +325,13 @@ export default class PokerTable {
         }, currency(0));
 
         if (winners.length === 1) {
-          winners[0].winnings.add(mainPot);
+          const winner = winners[0];
+          winner.curBet = winner.curBet.add(mainPot);
         } else { // chop
-          mainPot.distribute(winners.length).forEach((curr, i) =>
-            winners[i].winnings.add(curr));
+          mainPot.distribute(winners.length).forEach((curr, i) => {
+            const winner = winners[i];
+            winner.curBet = winner.curBet.add(curr);
+          });
         }
 
         // remove player(s) that have received their max possible winnings
@@ -297,27 +339,34 @@ export default class PokerTable {
         pot = pot.subtract(mainPot);
       }
 
-      await io.to(roomID).timeout(3000).emit('showdown', {
+      io.to(roomID).emit('tableState', {
         players: players,
-        best: best.toString().replace(/\s|10/g, m => m === '10' ? 'T' : '').split(','),
-        hands: hands.map((hand, i) => seats.includes(i) || this.aggressor === i ? hand : undefined),
+        best: best.toString().replace(/10/g, 'T'),
+        hands: hands.map((hand, i) => seats.includes(i) || this.raiser === i ? hand : undefined),
+        pot: pot,
       });
 
       seats.forEach(seat => {
-        const player = players[seat];
-        player.stack = player.stack.add(player.winnings);
-        player.winnings = currency(0);
+        const player = inHand[seat];
+        player.stack = player.stack.add(player.curBet);
+        player.curBet = currency(0);
       })
 
       // remove winning players, hands
       inHand = inHand.filter(player => !seats.includes(player.seat));
       solvedHands = solvedHands.filter(hand => !best.includes(hand));
+
+      // sleep
+      await new Promise(resolve => setTimeout(resolve, 3000));
     }
   }
 
   posthand() { // clean up
     const {io, roomID, players} = this;
     this.board = [];
+    this.hands = [];
+    this.deck.init();
+    this.raiser = undefined;
     players.forEach(player => {
       if (player) {
         if (!player.stack.value) {
@@ -336,6 +385,7 @@ export default class PokerTable {
 
     io.to(roomID).emit('tableState', {
       players: players,
+      best: this.best,
       board: this.board,
     });
   }
@@ -359,6 +409,10 @@ export default class PokerTable {
 
     players[seat] = player;
     if (this.button === undefined) this.button = seat;
+    this.io.to(this.roomID).emit('tableState', {
+      players: players,
+      curPlayers: this.curPlayers,
+    })
     return true;
   }
 
@@ -376,6 +430,10 @@ export default class PokerTable {
   kick(seat) {
     this.players[seat] = undefined;
     this.curPlayers--;
+    this.io.to(this.roomID).emit('tableState', {
+      players: this.players,
+      curPlayers: this.curPlayers,
+    })
   }
 
   // returns seat of the next acting player after a given player seat
@@ -393,6 +451,8 @@ export default class PokerTable {
     return {
       players : this.players,
       blinds : this.blinds,
+      curPlayers: this.curPlayers,
+      maxPlayers: this.maxPlayers,
       isPaused : this.isPaused,
       turn : this.turn,
       button : this.button,
