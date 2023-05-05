@@ -7,10 +7,11 @@
   export let minRaise: number;
   export let pot: number;
   export let toAct: boolean;
-  export let handleAction: (e: SubmitEvent) => void;
+  export let handleSubmit: (e: SubmitEvent) => void;
 
   const log = (arg: number, base: number) => Math.log(arg) / Math.log(base);
   
+  const total = stack + bet;
   let betSlider = 0;
   let isOpenSlider = false;
 
@@ -35,15 +36,15 @@
 
 <svelte:window on:mousedown={handleSliderClose}/>
 
-<form class="actions" on:submit|preventDefault={handleAction}>
+<form class="actions" on:submit|preventDefault={handleSubmit}>
   <button value='fold'>Fold</button>
   {#if bet === toMatch}
     <button value='check'>Check</button>
-  {:else if stack > toMatch}
-    <button value='call'>Call</button>
+  {:else if total >= toMatch}
+    <button value='call'>{total > toMatch ? 'Call' : 'All In'}</button>
   {/if}
-  {#if true || callAmt >= minRaise} <!-- betting round still open ? -->
-    {#if raiseAmt != stack && stack > minBet}
+  {#if total > toMatch && (toAct || callAmt >= minRaise)} <!-- bet round still open? -->
+    {#if stack > minBet && stack !== raiseAmt}
       {#if !isOpenSlider}
         <button type='button' on:click={() => isOpenSlider = true}>Raise</button>
       {:else}
@@ -69,12 +70,12 @@
           <button type='button' on:click={() => handleRaiseAmt(raiseAmt + 1)}>
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" d="M12 5.5v13m6.5-6.5h-13"></path>
-            </svg>                     
+            </svg>
           </button>
           <button type='button' on:click={() => handleRaiseAmt(raiseAmt - 1)}>
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
               <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 12h-15" />
-            </svg>                     
+            </svg>
           </button>
           <input type='range' bind:value={betSlider} style:background-size={`${betSlider}% 100%`}>
         </div>
