@@ -2,13 +2,14 @@
   import { fly } from 'svelte/transition';
   import type { ICard } from '$lib/consts';
   export let card: ICard;
+  export let best = false;
 </script>
 
-<div class={card ? card[1] : 'h'} transition:fly|local={{y: -16}}>
+<div class={card ? card[1] : 'back'} class:best>
   {#if card}
     {@const rank = card[0]}
-    <span>{ rank }</span>
-    <span>{ rank }</span>
+    <p>{ rank }</p>
+    <p>{ rank }</p>
   {/if}
 </div>
 
@@ -29,18 +30,18 @@
     background: linear-gradient(20deg, #111827, #475569);
   }
 
-  span:first-child {
+  p:first-child {
     font-size: 1.5rem;
     line-height: 1.25;
   }
 
-  span:last-child {
+  p:last-child {
     font-size: 4.5rem;
     line-height: 1;
     text-align: center;
   }
 
-  .winning {
+  .best {
     box-shadow: 0 0 10px 5px #0ff;
   }
 
