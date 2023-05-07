@@ -1,28 +1,31 @@
 <script lang="ts">
-  import { fly } from 'svelte/transition';
-  import type { ICard } from '$lib/consts';
-  export let card: ICard;
-  export let best = false;
+  import { fly } from "svelte/transition";
+  export let card = '';
+  export let best: boolean | undefined;
+  export let isinHand = true;
+
+  $: folded = !isinHand || best === false;
 </script>
 
-<div class={card ? card[1] : 'back'} class:best>
+<div class={card ? card[1] : 'back'} class:best class:folded transition:fly={{y: -16}}>
   {#if card}
     {@const rank = card[0]}
-    <p>{ rank }</p>
-    <p>{ rank }</p>
+    <p class='sm'>{rank}</p>
+    <p class='big'>{rank}</p>
   {/if}
 </div>
 
 <style>
   div {
     display: inline-block;
-    height: 7rem;
-    width: 5rem;
+    aspect-ratio: 5 / 7;
+    width: 4.5rem;
     padding: 0 0.375rem;
     border-radius: 0.375rem;
     color: white;
     font-weight: 800;
-    filter: drop-shadow(0 10px 8px rgb(255 255 255 / 0.04)) drop-shadow(0 4px 3px rgb(255 255 255 / 0.1));
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+    user-select: none;
   }
 
   .back {
@@ -30,19 +33,23 @@
     background: linear-gradient(20deg, #111827, #475569);
   }
 
-  p:first-child {
+  .sm {
     font-size: 1.5rem;
     line-height: 1.25;
   }
 
-  p:last-child {
-    font-size: 4.5rem;
-    line-height: 1;
+  .big {
+    font-size: 4rem;
+    line-height: 0.9;
     text-align: center;
   }
 
   .best {
-    box-shadow: 0 0 10px 5px #0ff;
+    box-shadow: 0 0 8px 2px #0ff;
+  }
+
+  .folded {
+    filter: brightness(50%);
   }
 
   :is(.s) {

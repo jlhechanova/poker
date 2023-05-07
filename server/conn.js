@@ -87,7 +87,6 @@ const conn = (io) => {
         return;
       }
 
-      io.to(roomID).emit('tableState', {players: table.players});
       socket.isinSeat = true;
       socket.seat = seat;
       fn(true);
@@ -101,7 +100,6 @@ const conn = (io) => {
       table.playerLeave(seat);
       socket.isinSeat = false;
       delete socket.seat;
-      io.to(roomID).emit('tableState', {players: table.players});
     })
 
     socket.on('start', () => {
@@ -109,7 +107,10 @@ const conn = (io) => {
       const table = rooms.get(roomID)?.table;
       if (table && table.isPaused) {
         if (!table.isOngoing) {
-          table.run();
+          table.isOngoing = setTimeout(() => {
+            table.isOngoing = null;
+            if (table.curPlayers > 1) table.run();
+          }, table.turn !== null || !table.phase ? 0 : 1000);
         }
         table.isPaused = false;
         io.to(roomID).emit('tableState', {isPaused: false});
@@ -130,6 +131,7 @@ const conn = (io) => {
     })
 
     socket.on('disconnect', async () => {
+      console.log(`${socket.id} has disconnected`);
       const roomID = socket.roomID;
       if (!roomID) return;
 

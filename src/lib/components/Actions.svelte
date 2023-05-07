@@ -1,23 +1,24 @@
 <script lang='ts'>
   import { fly } from "svelte/transition";
   import { sizes } from "$lib/consts";
-  export let bet: number;
+  export let curBet: number;
   export let stack: number;
   export let toMatch: number;
   export let minRaise: number;
   export let pot: number;
+  export let curPot: number;
   export let toAct: boolean;
   export let handleSubmit: (e: SubmitEvent) => void;
 
   const log = (arg: number, base: number) => Math.log(arg) / Math.log(base);
-  
-  const total = stack + bet;
+
   let betSlider = 0;
   let isOpenSlider = false;
 
-  const callAmt = toMatch - bet;
+  const callAmt = Math.min(toMatch - curBet, stack);
   const minBet = callAmt + minRaise;
   $: raiseAmt = minBet + Math.round((stack - minBet + 1) ** (betSlider / 100) - 1);
+  $: raiseTo = curBet + raiseAmt;
 
   const handleSliderClose = (e: MouseEvent) => {
     if (!(<HTMLElement> e.target).closest('.actions')) {
@@ -27,9 +28,7 @@
   }
 
   const handleRaiseAmt = (amt: number) => {
-    if (amt > stack) amt = stack;
-    else if (amt < minBet) amt = minBet;
-
+    amt = Math.min(Math.max(amt, minBet), stack);
     betSlider = 100 * log(amt - minBet + 1, stack - minBet + 1);
   }
 </script>
@@ -38,20 +37,26 @@
 
 <form class="actions" on:submit|preventDefault={handleSubmit}>
   <button value='fold'>Fold</button>
-  {#if bet === toMatch}
+  {#if curBet === toMatch}
     <button value='check'>Check</button>
-  {:else if total >= toMatch}
-    <button value='call'>{total > toMatch ? 'Call' : 'All In'}</button>
+  {:else}
+    <button value='call'>
+      Call
+      <br>
+      {callAmt}
+  </button>
   {/if}
-  {#if total > toMatch && (toAct || callAmt >= minRaise)} <!-- bet round still open? -->
-    {#if stack > minBet && stack !== raiseAmt}
-      {#if !isOpenSlider}
-        <button type='button' on:click={() => isOpenSlider = true}>Raise</button>
-      {:else}
-        <button value={raiseAmt}>Raise</button>
-      {/if}
+  {#if curBet + stack > toMatch && (toAct || callAmt >= minRaise)} <!-- bet round still open? -->
+    {#if isOpenSlider || raiseAmt >= stack}
+      <button value={raiseAmt}>
+        {toMatch ? 'Raise To' : 'Bet'}
+        <br>
+        {raiseTo}
+      </button>
     {:else}
-      <button value={stack}>All In</button>
+      <button type='button' on:click={() => isOpenSlider = true}>
+        {toMatch ? 'Raise' : 'Bet'}
+      </button>
     {/if}
   {/if}
   {#if isOpenSlider}
@@ -60,7 +65,7 @@
         <ul>
           {#each sizes as [mult, size]}
             <li>
-              <button type='button' value={mult} on:click={() => handleRaiseAmt(pot * mult)}>
+              <button type='button' value={mult} on:click={() => handleRaiseAmt((pot + curPot) * mult)}>
                 {size}
               </button>
             </li>
@@ -80,7 +85,7 @@
           <input type='range' bind:value={betSlider} style:background-size={`${betSlider}% 100%`}>
         </div>
       </div>
-      <input type='number' bind:value={raiseAmt} on:change={e => handleRaiseAmt(e.target.value)}>
+      <input type='number' bind:value={raiseTo} on:change={e => handleRaiseAmt(e.target.value - curBet)}>
     </div>
   {/if}
 </form>
@@ -97,9 +102,9 @@
     width: 8rem;
     border-radius: 1rem;
     border: 0;
-    font-size: 1.5rem;
-    font-weight: 800;
+    font-size: 1.125rem;
     font-family: inherit;
+    line-height: 1.125;
     transition: 0.5s;
   }
 

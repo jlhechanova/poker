@@ -16,10 +16,13 @@
       isHost = false,
       isinSeat = false;
 
-  $: console.log(table);
-  $: ({players, blinds, turn, button, phaseid, isPaused, best,
-      hands, board, pot, curPot, toMatch, minRaise} = table ?? {});
+  $: ({players, blinds, curPlayers, maxPlayers, turn,
+    button, phase, isPaused, best, hands, board, pot,
+    curPot, toMatch, minRaise} = table ?? {});
 
+  $: if (hands) hands[seat] = hand;
+  // $: console.log(hands, best);
+      
   onMount(async () => {
     const tableState = await $socket.emitWithAck('getTable', $lobby);
     if (tableState) table = tableState;
@@ -32,6 +35,8 @@
   let action = '';
   let interval: NodeJS.Timeout;
   let timeout: NodeJS.Timeout | null = null;
+  $: if (timeout && isPaused) action = 'pause';
+  $: if (!isPaused) action = '';
   const handleAction = (fn: (arg?: any) => void) => {
     interval = setInterval(() => {
       if (action && timeout) {
@@ -83,49 +88,49 @@
   onDestroy(() => {
     $socket.emit('leaveRoom');
     $socket.offAny();
-    $lobby = '';
+    lobby.set('');
   })
 </script>
 
 <div class="container">
-  {#if table}
-    {@const numPlayers = players.length}
-    <div class="table">
-      <div class="board">
-        {#if pot}
-          <div class="pot">
-            {#if curPot}<span>{ curPot }</span>{/if}
-            Pot: { pot }
-          </div>
+  <div class="table">
+    <div class="board">
+      <div class="pot">
+        {#if curPot}
+          <span class='curr'>{curPot}</span>
         {/if}
-        {#each board as card}
-          <Card {card} best={best?.includes(card)}/>
-        {/each}
+        {#if best}
+          <span class='curr'>{best[0]}</span>
+        {:else if pot}
+          <span>Pot: {pot}</span>
+        {/if}
       </div>
-      <div class="seats">
-        {#each Array(numPlayers) as _, i (i)}
-          {@const idx = (i + seat) % numPlayers}
+      {#if board}
+        {#each board as card}
+          <Card {card} best={best?.[1].includes(card)}/>
+        {/each}
+      {/if}
+    </div>
+    <div class="seats">
+      {#if players}
+        {#each Array(maxPlayers) as _, i (i)}
+          {@const idx = (i + seat) % maxPlayers}
           {@const player = players[idx]}
           {@const {top, right, bottom, left, transform} = coordsSeat[i]}
           <div class="seat" style:top style:right style:bottom style:left style:transform>
             {#if player}
-              <Player {player}>
-                <!-- always show plain user hand except 
-                  when its a winning hand in showdown -->
-                {#if !i && hand && (!hands || !hands[seat])}
-                  <Card card={hand[0]} />
-                  <Card card={hand[1]} />
-                {:else if player.isinHand}
-                  {@const hand = hands ? hands[idx] : null}
-                  {@const [one, two] = hand ?? ''}
-                  <Card card={one} best={best?.includes(one)}/>
-                  <Card card={two} best={best?.includes(two)}/>
+              {@const {isinHand, curBet} = player}
+              <Player {player} {button}>
+                {#if isinHand || !i && hand} <!-- always show user hand  -->
+                  {@const [one, two] = hands[idx] ?? ''}
+                  <Card card={one} best={best?.[1].includes(one)} {isinHand} />
+                  <Card card={two} best={best?.[1].includes(two)} {isinHand} />
                 {/if}
               </Player>
-              {#if player.isinHand && player.curBets}
+              {#if isinHand && curBet}
                 {@const {top, right, bottom, left, transform} = coordsBet[i]}
-                <span style:top style:right style:bottom style:left style:transform>
-                  {player.curBets}
+                <span class='curr' style:top style:right style:bottom style:left style:transform>
+                  {#if !phase}+{/if}{curBet}
                 </span>
               {/if}
             {:else}
@@ -137,49 +142,62 @@
             {/if}
           </div>
         {/each}
-      </div>
-      {#if isinSeat}
-        <button class='control' style:right='-4rem' on:click={handleLeaveTable}>
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M9 8.25H5.5a2.25 2.25 0 00-2.25 2.25v9a2.25 2.25 0 002.25 2.25h13a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25H15m0-3l-3-3m0 0l-3 3m3-3V15" />
-          </svg>          
+      {/if}
+    </div>
+    {#if isinSeat}
+      <button class='control' style:right='-4rem' on:click={handleLeaveTable}>
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 8.25H5.5a2.25 2.25 0 00-2.25 2.25v9a2.25 2.25 0 002.25 2.25h13a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25H15m0-3l-3-3m0 0l-3 3m3-3V15" />
+        </svg>          
+      </button>
+    {:else}
+      <button class='control' style:right='-4rem' on:click={() => goto('/')}>
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
+        </svg>
+      </button>
+    {/if}
+    {#if !isPaused}
+      {#if isHost}
+        <button class='control' style:left='-4rem' on:click={() => $socket.emit('pause')}>
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25v13.5m-7.5-13.5v13.5" />
+          </svg>
         </button>
       {:else}
-        <button class='control' style:right='-4rem' on:click={() => goto('/')}>
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
+        <button class='control' style:left='-4rem' disabled>
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25v13.5m-7.5-13.5v13.5" />
           </svg>
         </button>
       {/if}
-      {#if isHost && table.curPlayers > 1}
-        {#if table.isPaused}
-          <button class='control' style:left='-4rem' on:click={() => $socket.emit('start')}>
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
-            </svg>          
-          </button>
-        {:else}
-          <button class='control' style:left='-4rem' on:click={() => $socket.emit('pause')}>
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25v13.5m-7.5-13.5v13.5" />
-            </svg>                   
-          </button>
-        {/if}
-      {/if}
-    </div>
-  {/if}
+    {:else if !isHost || curPlayers < 2 || !phase && board.length}
+      <button class='control' style:left='-4rem' disabled>
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
+        </svg>
+      </button>
+    {:else}
+      <button class='control' style:left='-4rem' on:click={() => $socket.emit('start')}>
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
+        </svg>
+      </button>
+    {/if}
+  </div>
 </div>
 <div class='hud'>
   <div></div>
-  {#if isinSeat}
-    {@const player = players[seat]}
+  {#if timeout && !action}
+    {@const {stack, curBet, toAct} = players[seat]}
     <Actions
-      bet={player.curBet} 
-      stack={player.stack} 
-      toMatch={toMatch}
-      minRaise={minRaise}
-      pot={pot + curPot}
-      toAct={player.toAct}
+      {curBet} 
+      {stack} 
+      {toMatch}
+      {minRaise}
+      {pot}
+      {curPot}
+      {toAct}
       {handleSubmit}
     />
   {/if}
@@ -226,19 +244,22 @@
   
   .pot {
     position: absolute;
-    top: -1.5rem;
+    top: -1.825rem;
     left: 50%;
     transform: translateX(-50%);
     color: white;
+    font-size: 1.125rem;
     font-weight: 600;
     text-align: center;
   }
 
-  .pot span {
+  .curr {
     display: inline-block;
     padding: 0 0.5rem;
     height: 1.5rem;
     background-color: #111827;
+    color: white;
+    font-weight: 600;
     border-radius: 0.5rem;
   }
 
@@ -248,10 +269,9 @@
     left: 50%;
     transform: translate(-50%, -3rem);
     height: 7rem;
-    width: 100%;
-    max-width: 26rem;
     display: grid;
-    grid-template-columns: repeat(5, 5rem);
+    grid-template-columns: repeat(5, 4.5rem);
+    gap: 0.25rem;
     justify-content: space-between;
   }
 
