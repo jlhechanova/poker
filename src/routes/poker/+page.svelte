@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import Player from '$lib/components/Player.svelte';
   import Card from '$lib/components/Card.svelte';
+  import Timer from '$lib/components/Timer.svelte';
+  import Player from '$lib/components/Player.svelte';
   import Actions from '$lib/components/Actions.svelte';
   import { coordsSeat, coordsBet } from '$lib/consts';
   import { socket, lobby } from '$lib/stores';
@@ -12,52 +13,51 @@
 
   let table: PokerTable,
       seat = 0,
-      hand: ICard[],
+      hand: ICard[] | undefined,
       isHost = false,
+      isTurn = false,
       isinSeat = false;
 
-  $: ({players, blinds, curPlayers, maxPlayers, turn,
-    button, phase, isPaused, best, hands, board, pot,
-    curPot, toMatch, minRaise} = table ?? {});
-
-  $: if (hands) hands[seat] = hand;
-  // $: console.log(hands, best);
-      
   onMount(async () => {
     const tableState = await $socket.emitWithAck('getTable', $lobby);
     if (tableState) table = tableState;
     else goto('/');
   })
 
+  $: ({players, blinds, curPlayers, maxPlayers, turn,
+    button, phase, isPaused, best, hands, board, pot,
+    curPot, toMatch, minRaise} = table ?? {});
+
+  $: if (hands) hands[seat] = hand;
+
   $socket.on('host', () => isHost = true);
   $socket.on('tableState', state => table = {...table, ...state});
 
+  /* action */
   let action = '';
-  let interval: NodeJS.Timeout;
-  let timeout: NodeJS.Timeout | null = null;
-  $: if (timeout && isPaused) action = 'pause';
   $: if (!isPaused) action = '';
+  let callback: (arg?: any) => void;
   const handleAction = (fn: (arg?: any) => void) => {
-    interval = setInterval(() => {
-      if (action && timeout) {
-        clearTimeout(timeout);
-        clearInterval(interval);
-        fn(action);
-        
-        timeout = null;
-        action = '';
-      }
-    });
-    
-    timeout = setTimeout(() => {
-      clearInterval(interval);
-      timeout = null;
-      action = '';
-    }, 15000);
+    callback = fn;
+
+    if (action === 'fold' || action === 'check' && players[seat].curBet === toMatch) {
+      callback(action);
+    } else {
+      isTurn = true;
+    }
+    action = '';
   }
 
+  const handleSubmit = (e: CustomEvent<{action: string}>) => {
+    callback(e.detail.action);
+    isTurn = false;
+    action = '';
+  }
+  /* action */
+
+  /* leave/join */
   const handleLeaveTable = () => {
-    if (timeout) action = 'fold';
+    if (isTurn) callback('fold');
 
     isinSeat = false;
     $socket.off('out');
@@ -80,10 +80,7 @@
       }
     }
   }
-
-  const handleSubmit = (e: SubmitEvent) => {
-    action = (<HTMLFormElement> e.submitter).value;
-  }
+  /* leave/join */
 
   onDestroy(() => {
     $socket.emit('leaveRoom');
@@ -113,8 +110,9 @@
     </div>
     <div class="seats">
       {#if players}
-        {#each Array(maxPlayers) as _, i (i)}
-          {@const idx = (i + seat) % maxPlayers}
+        {#each Array(maxPlayers) as _, i}
+          <!-- {@const idx = (i + seat) % maxPlayers} -->
+          {@const idx = i}
           {@const player = players[idx]}
           {@const {top, right, bottom, left, transform} = coordsSeat[i]}
           <div class="seat" style:top style:right style:bottom style:left style:transform>
@@ -130,8 +128,11 @@
               {#if isinHand && curBet}
                 {@const {top, right, bottom, left, transform} = coordsBet[i]}
                 <span class='curr' style:top style:right style:bottom style:left style:transform>
-                  {#if !phase}+{/if}{curBet}
+                  {#if best}+{/if}{curBet}
                 </span>
+              {/if}
+              {#if !isPaused && turn === idx}
+                <Timer />
               {/if}
             {:else}
               <button class="join" on:click={() => handleJoinTable(idx)}>
@@ -188,7 +189,7 @@
 </div>
 <div class='hud'>
   <div></div>
-  {#if timeout && !action}
+  {#if isinSeat && players[seat]}
     {@const {stack, curBet, toAct} = players[seat]}
     <Actions
       {curBet} 
@@ -198,7 +199,8 @@
       {pot}
       {curPot}
       {toAct}
-      {handleSubmit}
+      {isTurn}
+      on:action={handleSubmit}
     />
   {/if}
 </div>
@@ -259,6 +261,7 @@
     height: 1.5rem;
     background-color: #111827;
     color: white;
+    font-size: 1.125rem;
     font-weight: 600;
     border-radius: 0.5rem;
   }
