@@ -35,8 +35,8 @@
 
   /* action */
   let action = '';
-  $: if (!isPaused) action = '';
   let callback: (arg?: any) => void;
+  $: if (isTurn && isPaused) callback('pause');
   const handleAction = (fn: (arg?: any) => void) => {
     callback = fn;
 
@@ -110,33 +110,34 @@
     </div>
     <div class="seats">
       {#if players}
-        {#each Array(maxPlayers) as _, i}
-          <!-- {@const idx = (i + seat) % maxPlayers} -->
-          {@const idx = i}
+        {#each Array(maxPlayers) as _, i (i)}
+          {@const idx = (i + seat) % maxPlayers}
           {@const player = players[idx]}
           {@const {top, right, bottom, left, transform} = coordsSeat[i]}
           <div class="seat" style:top style:right style:bottom style:left style:transform>
             {#if player}
               {@const {isinHand, curBet} = player}
               <Player {player} {button}>
-                {#if isinHand || !i && hand} <!-- always show user hand  -->
-                  {@const [one, two] = hands[idx] ?? ''}
-                  <Card card={one} best={best?.[1].includes(one)} {isinHand} />
-                  <Card card={two} best={best?.[1].includes(two)} {isinHand} />
+                <svelte:fragment slot='cards'>
+                  {#if isinHand || !i && hand} <!-- always show user hand  -->
+                    {@const [one, two] = hands[idx] ?? ''}
+                    <Card card={one} best={best?.[1].includes(one)} {isinHand} />
+                    <Card card={two} best={best?.[1].includes(two)} {isinHand} />
+                  {/if}
+                </svelte:fragment>
+                {#if isinHand && curBet}
+                  {@const {top, right, bottom, left, transform} = coordsBet[i]}
+                  <span class='curr' style:top style:right style:bottom style:left style:transform>
+                    {#if phase === 0}+{/if}{curBet}
+                  </span>
+                {/if}
+                {#if !isPaused && turn === idx}
+                  <Timer />
                 {/if}
               </Player>
-              {#if isinHand && curBet}
-                {@const {top, right, bottom, left, transform} = coordsBet[i]}
-                <span class='curr' style:top style:right style:bottom style:left style:transform>
-                  {#if best}+{/if}{curBet}
-                </span>
-              {/if}
-              {#if !isPaused && turn === idx}
-                <Timer />
-              {/if}
             {:else}
               <button class="join" on:click={() => handleJoinTable(idx)}>
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="3" stroke="currentColor">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M12 5.5v13m6.5-6.5h-13"></path>
                 </svg>
               </button>
@@ -149,7 +150,7 @@
       <button class='control' style:right='-4rem' on:click={handleLeaveTable}>
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" d="M9 8.25H5.5a2.25 2.25 0 00-2.25 2.25v9a2.25 2.25 0 002.25 2.25h13a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25H15m0-3l-3-3m0 0l-3 3m3-3V15" />
-        </svg>          
+        </svg>
       </button>
     {:else}
       <button class='control' style:right='-4rem' on:click={() => goto('/')}>
@@ -210,14 +211,13 @@
     position: relative;
     margin: auto;
     padding: 8rem 4rem;
-    max-width: 48rem;
+    max-width: 50rem;
     width: 100%;
   }
 
   .table {
     position: relative;
     height: 25rem;
-    max-width: 48rem;
     width: 100%;
     border-radius: 25rem;
     background-image: radial-gradient(#14532d, #15803d);
@@ -238,16 +238,27 @@
   }
 
   .join {
-    height: 4rem;
-    width: 4rem;
+    height: 3.5rem;
+    width: 3.5rem;
     border-radius: 50%;
     cursor: pointer;
+    color: #64748b;
+    border: 1px solid #1e293b;
+    background: linear-gradient(30deg, #082f49, transparent) rgb(0 0 0 / 0.1);
+    transition: all 400ms;
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  }
+
+  .join:hover {
+    color: #082f49;
+    background-color: #94a3b8;
   }
   
   .pot {
     position: absolute;
-    top: -1.825rem;
+    top: -2.5rem;
     left: 50%;
+    width: max-content;
     transform: translateX(-50%);
     color: white;
     font-size: 1.125rem;
@@ -263,17 +274,16 @@
     color: white;
     font-size: 1.125rem;
     font-weight: 600;
-    border-radius: 0.5rem;
+    border-radius: 1rem;
   }
 
   .board {
     position: absolute;
     top: 50%;
     left: 50%;
-    transform: translate(-50%, -3rem);
-    height: 7rem;
+    transform: translate(-50%, -2.5rem);
     display: grid;
-    grid-template-columns: repeat(5, 4.5rem);
+    grid-template-columns: repeat(5, 4rem);
     gap: 0.25rem;
     justify-content: space-between;
   }

@@ -8,7 +8,7 @@ const PREFLOP = 1, FLOP = 2, TURN = 3, RIVER = 4; // 0 is posthand
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 export default class PokerTable {
-  constructor(io, roomID, blinds = 1, maxPlayers = 4) {
+  constructor(io, roomID, blinds = 100, maxPlayers = 9) {
     this.io = io;
     this.roomID = roomID;
     this.players = Array.from({length: maxPlayers});
@@ -68,15 +68,16 @@ export default class PokerTable {
 
     if (this.turn !== null) return; // round not over, dont incr phase
 
+    this.phase = (this.phase + 1) % 5;
+    io.to(roomID).emit('tableState', {phase: this.phase});
+
     this.isOngoing = setTimeout(() => {
       this.isOngoing = null;
       if (this.isPaused) return;
 
       if (this.curPlayers > 1) {
-        this.phase = (this.phase + 1) % 5;
         io.to(roomID).emit('tableState', {
           players: this.players,
-          phase: this.phase,
           pot: this.pot,
           curPot: this.curPot,
           toMatch: this.toMatch,
@@ -107,7 +108,7 @@ export default class PokerTable {
     });
 
     // find key seats
-    let button = this.nextActingPlayer(this.button);
+    let button = this.nextActingPlayer(this.button ?? 0);
     let smBlind = this.nextActingPlayer(button);
     let bigBlind = this.nextActingPlayer(smBlind);
     
@@ -127,13 +128,13 @@ export default class PokerTable {
     bb.bet(Math.min(bb.stack.value, 2 * blinds));
     if (!sb.stack.value) sb.toAct = false;
     if (!bb.stack.value) bb.toAct = false;
-    this.pot = bb.totalBet.add(sb.totalBet);
+    this.curPot = bb.totalBet.add(sb.totalBet);
     this.toMatch = Math.max(bb.totalBet.value, sb.totalBet.value);
 
     io.to(this.roomID).emit('tableState', {
       players: players,
       button: button,
-      pot: this.pot,
+      curPot: this.curPot,
       toMatch: this.toMatch,
     });
   }
@@ -299,7 +300,6 @@ export default class PokerTable {
 
       io.to(roomID).emit('tableState', {
         players: players,
-        pot: this.pot,
       });
 
       player.stack = player.stack.add(player.curBet);
@@ -310,6 +310,7 @@ export default class PokerTable {
       return;
     }
 
+    await sleep(1000);
     const {board, hands} = this;
     let solvedHands = inHand.map(player => 
       Hand.solve(board.concat(hands[player.seat])));
@@ -382,8 +383,8 @@ export default class PokerTable {
         if (player.isinSeat) {
           player.isinHand = false;
         } else {
-          this.kick(player.seat);
           io.to(player.sid).emit('out');
+          this.kick(player.seat);
         }
       }
     });
@@ -393,6 +394,7 @@ export default class PokerTable {
       best: null,
       hands: Array.from({length: this.maxPlayers}),
       board: this.board,
+      pot: this.pot,
     });
   }
 
@@ -414,7 +416,6 @@ export default class PokerTable {
     }
 
     players[seat] = player;
-    if (this.button === null) this.button = seat;
     this.io.to(this.roomID).emit('tableState', {
       players: players,
       curPlayers: this.curPlayers,

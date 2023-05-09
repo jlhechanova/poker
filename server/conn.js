@@ -110,7 +110,7 @@ const conn = (io) => {
           table.isOngoing = setTimeout(() => {
             table.isOngoing = null;
             if (table.curPlayers > 1) table.run();
-          }, table.turn !== null || !table.phase ? 0 : 1000);
+          }, table.turn !== null || table.phase === 0 ? 0 : 1000);
         }
         table.isPaused = false;
         io.to(roomID).emit('tableState', {isPaused: false});
