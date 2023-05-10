@@ -7,7 +7,7 @@
   $: folded = !isinHand || best === false;
 </script>
 
-<div class={card ? card[1] : 'back'} class:best class:folded in:fly|local={{y: -16}}>
+<div class={card ? card[1] : 'back'} class:best class:folded transition:fly|local={{y: -16}}>
   {#if card}
     {@const rank = card[0]}
     <p class='sm'>{rank}</p>

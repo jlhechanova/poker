@@ -128,7 +128,7 @@
                 {#if isinHand && curBet}
                   {@const {top, right, bottom, left, transform} = coordsBet[i]}
                   <span class='curr' style:top style:right style:bottom style:left style:transform>
-                    {#if phase === 0}+{/if}{curBet}
+                    {#if phase === 0 && !curPot}+{/if}{curBet}
                   </span>
                 {/if}
                 {#if !isPaused && turn === idx}
@@ -201,6 +201,7 @@
       {curPot}
       {toAct}
       {isTurn}
+      {isPaused}
       on:action={handleSubmit}
     />
   {/if}
@@ -210,7 +211,7 @@
   .container {
     position: relative;
     margin: auto;
-    padding: 8rem 4rem;
+    padding: 12rem 4rem;
     max-width: 50rem;
     width: 100%;
   }

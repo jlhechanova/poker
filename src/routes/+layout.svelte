@@ -9,6 +9,6 @@
 <style>
   main {
     height: 100%;
-    background-image: radial-gradient(#cbd5e1, #0f172a);
+    background-image: radial-gradient(#334155, #020617);
   }
 </style>

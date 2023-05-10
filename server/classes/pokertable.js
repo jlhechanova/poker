@@ -70,11 +70,11 @@ export default class PokerTable {
 
     this.phase = (this.phase + 1) % 5;
     io.to(roomID).emit('tableState', {phase: this.phase});
-
+    
     this.isOngoing = setTimeout(() => {
       this.isOngoing = null;
       if (this.isPaused) return;
-
+      
       if (this.curPlayers > 1) {
         io.to(roomID).emit('tableState', {
           players: this.players,
@@ -310,10 +310,12 @@ export default class PokerTable {
       return;
     }
 
-    await sleep(1000);
     const {board, hands} = this;
+    io.to(roomID).emit('tableState', {hands: hands});
     let solvedHands = inHand.map(player => 
       Hand.solve(board.concat(hands[player.seat])));
+      
+    await sleep(1000);
 
     while (pot.value) { // uses fact that pot === sum of player bets
       const best = Hand.winners(solvedHands);

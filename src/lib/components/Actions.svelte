@@ -1,4 +1,5 @@
 <script lang='ts'>
+  import { createEventDispatcher } from "svelte";
   import { fly } from "svelte/transition";
   import { sizes } from "$lib/consts";
   export let curBet: number;
@@ -8,22 +9,24 @@
   export let pot: number;
   export let curPot: number;
   export let toAct: boolean;
-  export let handleSubmit: (e: SubmitEvent) => void;
+  export let isTurn: boolean;
+  export let isPaused: boolean;
 
   const log = (arg: number, base: number) => Math.log(arg) / Math.log(base);
 
   let betSlider = 0;
   let isOpenSlider = false;
+  $: if (isPaused) isOpenSlider = false;
+  $: if (!isOpenSlider) betSlider = 0;
 
-  const callAmt = Math.min(toMatch - curBet, stack);
-  const minBet = callAmt + minRaise;
+  $: callAmt = toMatch - curBet;
+  $: minBet = callAmt + minRaise;
   $: raiseAmt = minBet + Math.round((stack - minBet + 1) ** (betSlider / 100) - 1);
   $: raiseTo = curBet + raiseAmt;
 
   const handleSliderClose = (e: MouseEvent) => {
     if (!(<HTMLElement> e.target).closest('.actions')) {
       isOpenSlider = false;
-      betSlider = 0;
     }
   }
 
@@ -31,37 +34,53 @@
     amt = Math.min(Math.max(amt, minBet), stack);
     betSlider = 100 * log(amt - minBet + 1, stack - minBet + 1);
   }
+
+  const dispatch = createEventDispatcher();
+
+  const handleSubmit = (e: SubmitEvent) => {
+    const action = (<HTMLFormElement> e.submitter).value;
+    dispatch('action', {action: action});
+    isOpenSlider = false;
+  }
 </script>
 
 <svelte:window on:mousedown={handleSliderClose}/>
 
 <form class="actions" on:submit|preventDefault={handleSubmit}>
-  <button value='fold'>Fold</button>
-  {#if curBet === toMatch}
-    <button value='check'>Check</button>
-  {:else}
-    <button value='call'>
-      Call
-      <br>
-      {callAmt}
-  </button>
-  {/if}
-  {#if curBet + stack > toMatch && (toAct || callAmt >= minRaise)} <!-- bet round still open? -->
-    {#if isOpenSlider || raiseAmt >= stack}
-      <button value={raiseAmt}>
-        {toMatch ? 'Raise To' : 'Bet'}
-        <br>
-        {raiseTo}
-      </button>
+  {#if !isPaused && isTurn}
+    <button value='fold' class='fold'>Fold</button>
+    {#if curBet === toMatch}
+      <button value='check' class='check'>Check</button>
     {:else}
-      <button type='button' on:click={() => isOpenSlider = true}>
-        {toMatch ? 'Raise' : 'Bet'}
+      <button value='call' class='call'>
+        Call
+        <br>
+        {Math.min(callAmt, stack)}
       </button>
     {/if}
+    {#if curBet + stack > toMatch && (toAct || callAmt >= minRaise)} <!-- bet round still open? -->
+      {#if isOpenSlider || raiseAmt >= stack}
+        <button value={raiseAmt} class='raise'>
+          {toMatch ? 'Raise To' : 'Bet'}
+          <br>
+          {Math.min(raiseTo, curBet + stack)}
+        </button>
+      {:else}
+        <button type='button' class='raise' on:click={() => isOpenSlider = true}>
+          {toMatch ? 'Raise' : 'Bet'}
+        </button>
+      {/if}
+    {/if}
+
+  {:else}
+    <button class='fold' disabled>Fold</button>
+    <button class='check' disabled>Check</button>
+    <button class='raise' disabled>Raise</button>
   {/if}
+
   {#if isOpenSlider}
-    <div class='raise' transition:fly={{y: 16}}>
-      <div class="slider">
+    <div class='slider' transition:fly={{y: 16}}>
+      <div class="range">
         <ul>
           {#each sizes as [mult, size]}
             <li>
@@ -94,43 +113,73 @@
   .actions {
     display: grid;
     grid-template-columns: 1fr 1fr 1fr;
-    justify-content: space-between;
+    gap: 0.25rem;
   }
 
   .actions > button {
+    position: relative;
     height: 4rem;
     width: 8rem;
+    color: white;
     border-radius: 1rem;
-    border: 0;
     font-size: 1.125rem;
     font-family: inherit;
     line-height: 1.125;
-    transition: 0.5s;
+    cursor: pointer;
+    z-index: 1;
+  }
+
+  .fold {
+    border: 1px solid #e22e2e;
+	  box-shadow: 0 0 10px #bb0f0f;
+    background: linear-gradient(to bottom, #9a451e 0%,#d8532a 50%,#ca4b20 51%,#e8957e 100%);
+  }
+
+  .check {
+    border: 1px solid #44cc44;
+    box-shadow: 0 0 10px #22aa22;
+    background: linear-gradient(to bottom, #1e6037 0%,#288a46 50%,#237f40 51%,#37c15e 100%);
+  }
+
+  .call {
+    border: 1px solid #7dd3fc;
+	  box-shadow: 0 0 10px #38bdf8;
+    background: linear-gradient(to bottom, #0c4a6e 0%,#0284c7 50%,#0369a1 51%,#0ea5e9 100%);
   }
 
   .raise {
+    border: 1px solid #fab73b;
+	  box-shadow: 0 0 10px #eb9f12;
+    background: linear-gradient(to bottom, #9a8b1e 0%,#d8b52a 50%,#caab20 51%,#e8d17e 100%);
+  }
+
+  .actions > button:disabled {
+    filter: brightness(50%);
+    cursor: default;
+  }
+
+  .slider {
     position: absolute;
     right: 0;
-    bottom: 4rem;
+    bottom: 4.25rem;
     width: 8rem;
     padding: 1rem 0;
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 1rem;
-    border-top-left-radius: 1rem;
-    border-top-right-radius: 1rem;
+    border-radius: 1rem;
     background-color: #f8fafc;
   }
 
-  .slider {
+  .range {
     position: relative;
     display: grid;
     grid-template-columns: 1.25fr 1fr;
     height: 22rem;
   }
 
-  .raise ul {
+  .slider ul {
     height: 100%;
     display: grid;
     grid-template-rows: 2.25rem 1fr repeat(5, 2.25rem);
@@ -139,7 +188,7 @@
     gap: 0.25rem;
   }
 
-  .slider button {
+  .range button {
     appearance: none;
     height: 2.25rem;
     width: 3.5rem;
@@ -155,18 +204,18 @@
     transition: filter 0.5s;
   }
 
-  .slider button:hover {
+  .range button:hover {
     filter: brightness(150%);
   }
 
-  .slider div {
+  .range div {
     display: flex;
     flex-direction: column;
     justify-content: space-between;
     align-items: end;
   }
 
-  .slider div button {
+  .range div button {
     appearance: none;
     height: 1.75rem;
     width: 1.75rem;
@@ -185,6 +234,7 @@
     background-image: linear-gradient(#334155, #334155);
     background-repeat: no-repeat;
     box-shadow: inset 0 0 4px #00000026;
+    z-index: 0;
   }
 
   /* Input Thumb */
@@ -255,7 +305,7 @@
     background: transparent;
   }
   
-  .raise input[type='number'] {
+  .slider input[type='number'] {
     -moz-appearance: textfield; /* Firefox */
     appearance: none;
     height: 2rem;
@@ -266,8 +316,8 @@
     text-align: center;
   }
 
-  .raise input::-webkit-outer-spin-button,
-  .raise input::-webkit-inner-spin-button {
+  .slider input::-webkit-outer-spin-button,
+  .slider input::-webkit-inner-spin-button {
     /* display: none; <- Crashes Chrome on hover */
     -webkit-appearance: none;
     margin: 0; /* <-- Apparently some margin are still there even though it's hidden */
