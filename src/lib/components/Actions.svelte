@@ -127,6 +127,7 @@
     line-height: 1.125;
     cursor: pointer;
     z-index: 1;
+    transition: all 400ms;
   }
 
   .fold {
@@ -135,10 +136,18 @@
     background: linear-gradient(to bottom, #9a451e 0%,#d8532a 50%,#ca4b20 51%,#e8957e 100%);
   }
 
+  .fold:hover {
+    box-shadow: 0 0 10px #ff1515;
+  }
+
   .check {
     border: 1px solid #44cc44;
     box-shadow: 0 0 10px #22aa22;
     background: linear-gradient(to bottom, #1e6037 0%,#288a46 50%,#237f40 51%,#37c15e 100%);
+  }
+
+  .check:hover {
+    box-shadow: 0 0 10px #55ee55;
   }
 
   .call {
@@ -147,10 +156,18 @@
     background: linear-gradient(to bottom, #0c4a6e 0%,#0284c7 50%,#0369a1 51%,#0ea5e9 100%);
   }
 
+  .call:hover {
+    box-shadow: 0 0 10px #a5f3fc;
+  }
+
   .raise {
     border: 1px solid #fab73b;
 	  box-shadow: 0 0 10px #eb9f12;
     background: linear-gradient(to bottom, #9a8b1e 0%,#d8b52a 50%,#caab20 51%,#e8d17e 100%);
+  }
+
+  .raise:hover {
+    box-shadow: 0 0 10px #ffb429;
   }
 
   .actions > button:disabled {
