@@ -5,7 +5,6 @@ import conn from './conn.js';
 
 import { handler } from '../build/handler.js'
 
-const port = 3000
 const app = express()
 const server = createServer(app)
 
@@ -17,4 +16,5 @@ conn(io);
 // https://github.com/sveltejs/kit/tree/master/packages/adapter-node#custom-server
 app.use(handler)
 
-server.listen(port)
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => console.log(`Running on port ${PORT}`));
