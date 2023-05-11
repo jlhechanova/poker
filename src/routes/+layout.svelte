@@ -1,5 +1,13 @@
 <script>
   import "./styles.css";
+  import { socket } from "$lib/stores";
+  import { onMount } from "svelte";
+
+  onMount(() => { // attach stuff to socket. can also attach session id here
+    const username = sessionStorage.getItem('username');
+    if (username) $socket.auth = {username};
+    $socket.connect();
+  })
 </script>
 
 <main>

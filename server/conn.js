@@ -6,8 +6,10 @@ const rooms = new Map();
 const conn = (io) => {
   io.on('connection', (socket) => {
     console.log(`${socket.id} has connected`);
-    socket.username = 'Guest';
+    socket.username = socket.handshake.auth.username ?? 'Guest';
     socket.isinSeat = false;
+    socket.roomID = null;
+    socket.seat = null;
 
     socket.on('getTable', (roomID, fn) => {
       const room = rooms.get(roomID);
@@ -58,7 +60,7 @@ const conn = (io) => {
       if (!roomID) return;
 
       socket.leave(roomID);
-      delete socket.roomID;
+      socket.roomID = null;
 
       const room = rooms.get(roomID);
       if (!room) return;
@@ -89,7 +91,13 @@ const conn = (io) => {
 
       socket.isinSeat = true;
       socket.seat = seat;
+
+      // need to inform client of success before emitting table state
       fn(true);
+      io.to(roomID).emit('tableState', {
+        players: table.players,
+        curPlayers: table.curPlayers,
+      });
     })
 
     socket.on('leaveTable', seat => {
@@ -99,7 +107,7 @@ const conn = (io) => {
 
       table.playerLeave(seat);
       socket.isinSeat = false;
-      delete socket.seat;
+      socket.seat = null;
     })
 
     socket.on('start', () => {
@@ -128,6 +136,24 @@ const conn = (io) => {
         table.isPaused = true;
         io.to(roomID).emit('tableState', {isPaused: true});
       }
+    })
+
+    socket.on('editPlayer', data => {
+      const name = data.name;
+      const {roomID, seat} = socket;
+      if (!name || !roomID || seat === null) return;
+
+      const room = rooms.get(roomID);
+      if (!room) return;
+
+      const table = room.table;
+      const players = table.players;
+      const player = players[seat];
+      if (!player) return;
+      
+      players[seat].name = data.name.replace(/[^a-zA-Z0-9 -]/,'');
+      io.to(roomID).emit('tableState', {players: players});
+      socket.username = name;
     })
 
     socket.on('disconnect', async () => {

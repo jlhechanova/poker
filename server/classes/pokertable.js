@@ -317,17 +317,17 @@ export default class PokerTable {
       
     await sleep(1000);
 
-    while (pot.value) { // uses fact that pot === sum of player bets
+    // uses fact that pot === sum of player bets.
+    // if pot is not zero in one iteration, side pots.
+    while (pot.value) {
       const best = Hand.winners(solvedHands);
       const seats = best.map(hand => solvedHands.indexOf(hand));
       let winners = seats.map(seat => inHand[seat]);
       while (winners.length) {
         // get lowest bet amount from winning players
         const minAmt = winners.length === 1 ? winners[0].totalBet.value
-        : winners.reduce((prev, curr) => {
-          const a = prev.totalBet.value, b = curr.totalBet.value;
-          return a < b ? a : b;
-        });
+        : winners.reduce((prev, curr) => 
+          prev.totalBet.value < curr.totalBet.value ? prev : curr).totalBet.value;
 
         // solve for main pot by collecting minAmt from each player's bet.
         const mainPot = players.reduce((acc, player) => {
@@ -339,6 +339,7 @@ export default class PokerTable {
           return acc;
         }, currency(0));
 
+        // award pot (if multiple winners, chop)
         mainPot.distribute(winners.length).forEach((curr, i) => {
           const winner = winners[i];
           winner.curBet = winner.curBet.add(curr); // curBet doubles as winnings
@@ -349,6 +350,7 @@ export default class PokerTable {
         pot = pot.subtract(mainPot);
       }
 
+      // emit winnings before adding winnings to stack
       io.to(roomID).emit('tableState', {
         players: players,
         best: [best[0].name, best.toString().replace(/10/g, 'T').replace(/1/g, 'A')],
@@ -405,7 +407,7 @@ export default class PokerTable {
     let player = players[seat];
     if (player) return false; // seat somehow already taken
 
-    if (oldSeat === undefined) { // new player!
+    if (oldSeat === null) { // new player!
       player = new Player(sid, name, seat, this.blinds * 200);
       this.curPlayers++;
     } else {
@@ -418,10 +420,6 @@ export default class PokerTable {
     }
 
     players[seat] = player;
-    this.io.to(this.roomID).emit('tableState', {
-      players: players,
-      curPlayers: this.curPlayers,
-    })
     return true;
   }
 

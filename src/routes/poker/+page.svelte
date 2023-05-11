@@ -31,7 +31,9 @@
   $: if (hands) hands[seat] = hand;
 
   $socket.on('host', () => isHost = true);
-  $socket.on('tableState', state => table = {...table, ...state});
+  $socket.on('tableState', state => {
+    table = {...table, ...state}
+  });
 
   /* action */
   let action = '';
@@ -117,7 +119,8 @@
           <div class="seat" style:top style:right style:bottom style:left style:transform>
             {#if player}
               {@const {isinHand, curBet} = player}
-              <Player {player} {button}>
+              {@const isTurn = !isPaused && turn === idx}
+              <Player {player} {button} {isTurn} isUser={i === 0 && isinSeat}>
                 <svelte:fragment slot='cards'>
                   {#if isinHand || !i && hand} <!-- always show user hand  -->
                     {@const [one, two] = hands[idx] ?? ''}
@@ -131,7 +134,7 @@
                     {#if phase === 0 && !curPot}+{/if}{curBet}
                   </span>
                 {/if}
-                {#if !isPaused && turn === idx}
+                {#if isTurn}
                   <Timer />
                 {/if}
               </Player>
