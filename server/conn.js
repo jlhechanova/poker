@@ -155,7 +155,7 @@ const conn = (io) => {
 
       players[seat].name = name;
       io.to(roomID).emit('tableState', {players: players});
-      if (room.host.id === id) room.host.name = name;
+      if (room.host.sid === id) room.host.name = name;
       socket.username = name;
     })
 
