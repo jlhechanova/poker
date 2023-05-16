@@ -8,7 +8,7 @@ const PREFLOP = 1, FLOP = 2, TURN = 3, RIVER = 4; // 0 is posthand
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 export default class PokerTable {
-  constructor(io, roomID, blinds = 100, maxPlayers = 9) {
+  constructor(io, roomID, blinds = 10, maxPlayers = 9) {
     this.io = io;
     this.roomID = roomID;
     this.players = Array.from({length: maxPlayers});
@@ -408,7 +408,7 @@ export default class PokerTable {
     if (player) return false; // seat somehow already taken
 
     if (oldSeat === null) { // new player!
-      player = new Player(sid, name, seat, this.blinds * 200);
+      player = new Player(sid, name, seat, this.blinds * 100);
       this.curPlayers++;
     } else {
       player = players[oldSeat];
