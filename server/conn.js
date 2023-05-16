@@ -6,7 +6,8 @@ const rooms = new Map();
 const conn = (io) => {
   io.on('connection', (socket) => {
     console.log(`${socket.id} has connected`);
-    socket.username = socket.handshake.auth.username ?? 'Guest';
+    // socket.username = socket.handshake.auth.username ?? 'Guest';
+    socket.username = 'Guest';
     socket.isinSeat = false;
     socket.roomID = null;
     socket.seat = null;
@@ -139,8 +140,9 @@ const conn = (io) => {
     })
 
     socket.on('editPlayer', data => {
-      const name = data.name;
-      const {roomID, seat} = socket;
+      let name = data.name?.replace(/[^a-zA-Z0-9 -]/g,'');
+
+      const {id, roomID, seat} = socket;
       if (!name || !roomID || seat === null) return;
 
       const room = rooms.get(roomID);
@@ -150,9 +152,10 @@ const conn = (io) => {
       const players = table.players;
       const player = players[seat];
       if (!player) return;
-      
-      players[seat].name = data.name.replace(/[^a-zA-Z0-9 -]/,'');
+
+      players[seat].name = name;
       io.to(roomID).emit('tableState', {players: players});
+      if (room.host.id === id) room.host.name = name;
       socket.username = name;
     })
 
