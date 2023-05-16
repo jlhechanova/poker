@@ -2,6 +2,7 @@
   import { createEventDispatcher } from "svelte";
   import { fly } from "svelte/transition";
   import { sizes } from "$lib/consts";
+  export let blinds: number;
   export let curBet: number;
   export let stack: number;
   export let toMatch: number;
@@ -47,8 +48,25 @@
 <svelte:window on:mousedown={handleSliderClose}/>
 
 <form class="actions" on:submit|preventDefault={handleSubmit}>
+  <!-- buttons are placed in reverse so pressing Enter 
+  on the raise menu will submit with raise instead of fold -->
+  {#if !isPaused && isTurn && curBet + stack > toMatch && (toAct || callAmt >= minRaise)} <!-- bet round still open? -->
+    {#if isOpenSlider || raiseAmt >= stack}
+      <button value={raiseAmt} class='raise'>
+        {toMatch ? 'Raise To' : 'Bet'}
+        <br>
+        {Math.min(raiseTo, curBet + stack)}
+      </button>
+    {:else}
+      <button type='button' class='raise' on:click={() => isOpenSlider = true}>
+        {toMatch ? 'Raise' : 'Bet'}
+      </button>
+    {/if}
+  {:else}
+    <button class='raise' disabled>Raise</button>
+  {/if}
+
   {#if !isPaused && isTurn}
-    <button value='fold' class='fold'>Fold</button>
     {#if curBet === toMatch}
       <button value='check' class='check'>Check</button>
     {:else}
@@ -58,24 +76,14 @@
         {Math.min(callAmt, stack)}
       </button>
     {/if}
-    {#if curBet + stack > toMatch && (toAct || callAmt >= minRaise)} <!-- bet round still open? -->
-      {#if isOpenSlider || raiseAmt >= stack}
-        <button value={raiseAmt} class='raise'>
-          {toMatch ? 'Raise To' : 'Bet'}
-          <br>
-          {Math.min(raiseTo, curBet + stack)}
-        </button>
-      {:else}
-        <button type='button' class='raise' on:click={() => isOpenSlider = true}>
-          {toMatch ? 'Raise' : 'Bet'}
-        </button>
-      {/if}
-    {/if}
+  {:else}
+    <button class='check' disabled>Check</button>
+  {/if}
 
+  {#if !isPaused && isTurn}
+    <button value='fold' class='fold'>Fold</button>
   {:else}
     <button class='fold' disabled>Fold</button>
-    <button class='check' disabled>Check</button>
-    <button class='raise' disabled>Raise</button>
   {/if}
 
   {#if isOpenSlider}
@@ -84,19 +92,19 @@
         <ul>
           {#each sizes as [mult, size]}
             <li>
-              <button type='button' value={mult} on:click={() => handleRaiseAmt((pot + curPot) * mult)}>
+              <button type='button' on:click={() => handleRaiseAmt(minBet + (pot + curPot) * mult)}>
                 {size}
               </button>
             </li>
           {/each}
         </ul>
         <div>
-          <button type='button' on:click={() => handleRaiseAmt(raiseAmt + 1)}>
+          <button type='button' on:click={() => handleRaiseAmt(raiseAmt + blinds)}>
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" d="M12 5.5v13m6.5-6.5h-13"></path>
             </svg>
           </button>
-          <button type='button' on:click={() => handleRaiseAmt(raiseAmt - 1)}>
+          <button type='button' on:click={() => handleRaiseAmt(raiseAmt - blinds)}>
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
               <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 12h-15" />
             </svg>
@@ -111,22 +119,27 @@
 
 <style>
   .actions {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
+    position: relative;
+    height: 100%;
+    max-width: 100%;
+    display: flex;
+    justify-content: center;
+    flex-direction: row-reverse;
     gap: 0.25rem;
   }
 
   .actions > button {
     position: relative;
-    height: 4rem;
-    width: 8rem;
+    height: 100%;
+    width: 100%;
+    max-width: 8rem;
     color: white;
     border-radius: 1rem;
-    font-size: 1.125rem;
+    font-size: 1rem;
     font-family: inherit;
     line-height: 1.125;
     cursor: pointer;
-    z-index: 1;
+    z-index: 50;
     transition: all 400ms;
   }
 
@@ -178,7 +191,7 @@
   .slider {
     position: absolute;
     right: 0;
-    bottom: 4.25rem;
+    bottom: 110%;
     width: 8rem;
     padding: 1rem 0;
     display: flex;
@@ -187,6 +200,7 @@
     gap: 1rem;
     border-radius: 1rem;
     background-color: #f8fafc;
+    z-index: 40;
   }
 
   .range {
@@ -251,7 +265,6 @@
     background-image: linear-gradient(#334155, #334155);
     background-repeat: no-repeat;
     box-shadow: inset 0 0 4px #00000026;
-    z-index: 0;
   }
 
   /* Input Thumb */
@@ -338,5 +351,15 @@
     /* display: none; <- Crashes Chrome on hover */
     -webkit-appearance: none;
     margin: 0; /* <-- Apparently some margin are still there even though it's hidden */
+  }
+
+  @media all and (min-width: 640px) {
+    .actions {
+      justify-content: right;
+    }
+
+    .actions button {
+      font-size: 1.125rem;
+    }
   }
 </style>
