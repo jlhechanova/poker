@@ -30,9 +30,9 @@
 <style>
   svg {
     position: relative;
-    height: 100%;
+    aspect-ratio: 1 / 1;
     width: 100%;
-    z-index: 150;
+    z-index: 1;
     opacity: 0.5;
   }
 </style>

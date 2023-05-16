@@ -30,12 +30,15 @@
   }
 
   const handleCreate = async (e: SubmitEvent) => {
+    const submitter = e.submitter as HTMLButtonElement;
+    submitter.disabled = true;
     const data = new FormData(e.target as HTMLFormElement);
     const roomID = await $socket.emitWithAck('createRoom', Object.fromEntries(data.entries()));
     if (roomID) {
       lobby.set(roomID);
       goto('/poker');
     }
+    submitter.disabled = false;
   }
 </script>
 

@@ -19,28 +19,30 @@
   div {
     display: inline-block;
     aspect-ratio: 5 / 7;
-    width: 4rem;
+    width: 2.75rem;
     padding: 0 0.375rem;
     border-radius: 0.375rem;
     color: white;
     font-weight: 800;
     box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
     user-select: none;
+    transition: transform 200ms;
   }
 
   .back {
+    width: 2.25rem;
     border: 0.125rem solid white;
     background: linear-gradient(20deg, #111827, #475569);
   }
 
   .sm {
-    font-size: 1.5rem;
+    font-size: 1.25rem;
     line-height: 1.25;
   }
 
   .big {
-    font-size: 3.5rem;
-    line-height: 0.95;
+    font-size: 2.5rem;
+    line-height: 0.8;
     text-align: center;
   }
 
@@ -69,5 +71,25 @@
 
   :is(.d) {
     background: linear-gradient(20deg, #0c4a6e, #0284c7);
+  }
+
+  @media all and (min-width: 640px) {
+    div {
+      height: auto;
+      width: 4rem;
+    }
+
+    .back {
+      width: 4rem;
+    }
+
+    .sm {
+      font-size: 1.5rem;
+    }
+
+    .big {
+      font-size: 3.5rem;
+      line-height: 0.95;
+    }
   }
 </style>
