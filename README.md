@@ -1,6 +1,6 @@
 # Pokernova
 
-Pokernova is a browser-based poker cardroom built with SvelteKit and Socket.IO. It is designed to make the playing experience to be as simple as possible. It implements __no limit Texas hold 'em__ rules and foregoes some extra stuff (e.g. straddling) to simplify the user experience.
+Pokernova is a browser-based poker cardroom built with SvelteKit and Socket.IO. It implements __no limit Texas hold 'em__ rules.
 
 I first started this project to try write my own poker hand evaluator, until it expanded to a practice project for Svelte to showcase winning hands and eventually into a cardroom web app.
 
