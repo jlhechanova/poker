@@ -21,9 +21,8 @@
   $: if (!isOpenSlider) betSlider = 0;
 
   $: callAmt = toMatch - curBet;
-  $: minBet = callAmt + minRaise;
-  $: raiseAmt = minBet + Math.round((stack - minBet + 1) ** (betSlider / 100) - 1);
-  $: raiseTo = curBet + raiseAmt;
+  $: raiseAmt = Math.max(minRaise, Math.round((stack - callAmt + 1) ** (betSlider / 100) - 1));
+  $: raiseTo = curBet + callAmt + raiseAmt;
 
   const handleSliderClose = (e: MouseEvent) => {
     if (!(<HTMLElement> e.target).closest('.actions')) {
@@ -32,8 +31,9 @@
   }
 
   const handleRaiseAmt = (amt: number) => {
-    amt = Math.min(Math.max(amt, minBet), stack);
-    betSlider = 100 * log(amt - minBet + 1, stack - minBet + 1);
+    // max raise is entire stack minus amount to call
+    amt = Math.min(Math.max(amt, minRaise), stack - callAmt);
+    betSlider = 100 * log(amt + 1, stack - callAmt + 1);
   }
 
   const dispatch = createEventDispatcher();
@@ -52,10 +52,10 @@
   on the raise menu will submit with raise instead of fold -->
   {#if !isPaused && isTurn && curBet + stack > toMatch && (toAct || callAmt >= minRaise)} <!-- bet round still open? -->
     {#if isOpenSlider || raiseAmt >= stack}
-      <button value={raiseAmt} class='raise'>
+      <button value={callAmt + raiseAmt} class='raise'>
         {toMatch ? 'Raise To' : 'Bet'}
         <br>
-        {Math.min(raiseTo, curBet + stack)}
+        {raiseTo}
       </button>
     {:else}
       <button type='button' class='raise' on:click={() => isOpenSlider = true}>
@@ -92,7 +92,7 @@
         <ul>
           {#each sizes as [mult, size]}
             <li>
-              <button type='button' on:click={() => handleRaiseAmt(minBet + (pot + curPot) * mult)}>
+              <button type='button' on:click={() => handleRaiseAmt((pot + curPot + callAmt) * mult)}>
                 {size}
               </button>
             </li>
@@ -112,7 +112,7 @@
           <input type='range' bind:value={betSlider} style:background-size={`${betSlider}% 100%`}>
         </div>
       </div>
-      <input type='number' bind:value={raiseTo} on:change={e => handleRaiseAmt(e.target.value - curBet)}>
+      <input type='number' bind:value={raiseTo} on:change={e => handleRaiseAmt(e.target.value - curBet - callAmt)}>
     </div>
   {/if}
 </form>
